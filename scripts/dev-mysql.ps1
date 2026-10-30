@@ -7,8 +7,9 @@
   Windows service is never touched. Defaults: home D:\meesho_saas_mysql, port 3307, 127.0.0.1 only.
 
   init    Write my.ini, initialise the data directory, start the server, set a random root password,
-          create meesho_dev and meesho_test (utf8mb4) and a least-privilege app user. Credentials are
-          written to <home>\root.cnf, <home>\app.cnf and <home>\app.secret - never into the repository.
+          create meesho_dev and meesho_test (utf8mb4) and one least-privilege user per database
+          (meesho_app -> meesho_dev, meesho_test_app -> meesho_test). Credentials are written to
+          <home>\root.cnf, app.cnf/app.secret and test.cnf/test.secret - never into the repository.
   start   Start the server in the background.
   stop    Clean shutdown via mysqladmin.
   status  Report whether the port is listening and the server version.
@@ -32,6 +33,8 @@ $errLog = Join-Path $MySqlHome 'mysqld.err'
 $rootCnf = Join-Path $MySqlHome 'root.cnf'
 $appCnf = Join-Path $MySqlHome 'app.cnf'
 $appSecret = Join-Path $MySqlHome 'app.secret'
+$testCnf = Join-Path $MySqlHome 'test.cnf'
+$testSecret = Join-Path $MySqlHome 'test.secret'
 $mysqld = Join-Path $MySqlBin 'mysqld.exe'
 $mysql = Join-Path $MySqlBin 'mysql.exe'
 $mysqladmin = Join-Path $MySqlBin 'mysqladmin.exe'
@@ -116,25 +119,30 @@ default-character-set=utf8mb4
     Stop-AfterFailedInit
     throw
   }
-  Write-Output "Initialised. Credentials written to $rootCnf, $appCnf and $appSecret (outside the repo)."
+  Write-Output "Initialised. Credentials written to $rootCnf, $appCnf, $appSecret, $testCnf and $testSecret (outside the repo)."
 }
 
 function Set-Credentials {
   $rootPw = New-Password
   $appPw = New-Password
+  $testPw = New-Password
   $privs = 'SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, CREATE TEMPORARY TABLES, LOCK TABLES, CREATE VIEW, SHOW VIEW'
+  # One user per database, so tests (meesho_test_app) physically cannot reach meesho_dev.
   $sql = @"
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$rootPw';
 CREATE DATABASE IF NOT EXISTS meesho_dev  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE IF NOT EXISTS meesho_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE USER IF NOT EXISTS 'meesho_app'@'localhost' IDENTIFIED BY '$appPw';
+CREATE USER IF NOT EXISTS 'meesho_test_app'@'localhost' IDENTIFIED BY '$testPw';
 GRANT $privs ON meesho_dev.*  TO 'meesho_app'@'localhost';
-GRANT $privs ON meesho_test.* TO 'meesho_app'@'localhost';
+GRANT $privs ON meesho_test.* TO 'meesho_test_app'@'localhost';
 "@
   # Write the credential files first so a generated password is never lost.
   Write-PlainFile $rootCnf "[client]`nuser=root`npassword=$rootPw`nhost=127.0.0.1`nport=$Port`nprotocol=TCP`n"
   Write-PlainFile $appCnf "[client]`nuser=meesho_app`npassword=$appPw`nhost=127.0.0.1`nport=$Port`nprotocol=TCP`n"
-  Write-PlainFile $appSecret "DB_HOST=127.0.0.1`nDB_PORT=$Port`nDB_USER=meesho_app`nDB_PASSWORD=$appPw`nDB_NAME_DEV=meesho_dev`nDB_NAME_TEST=meesho_test`n"
+  Write-PlainFile $appSecret "DB_HOST=127.0.0.1`nDB_PORT=$Port`nDB_USER=meesho_app`nDB_PASSWORD=$appPw`nDB_NAME=meesho_dev`n"
+  Write-PlainFile $testCnf "[client]`nuser=meesho_test_app`npassword=$testPw`nhost=127.0.0.1`nport=$Port`nprotocol=TCP`n"
+  Write-PlainFile $testSecret "DB_HOST=127.0.0.1`nDB_PORT=$Port`nDB_USER=meesho_test_app`nDB_PASSWORD=$testPw`nDB_NAME=meesho_test`n"
 
   # Long-form options: PowerShell would split a bare -h127.0.0.1 into two arguments.
   $sql | & $mysql --no-defaults --protocol=TCP '--host=127.0.0.1' "--port=$Port" '--user=root'

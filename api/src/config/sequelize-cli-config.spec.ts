@@ -63,4 +63,44 @@ describe('db/config.js', () => {
     expect(dev.seederStorage).toBe('sequelize');
     expect(dev.seederStorageTableName).toBe('sequelize_data');
   });
+
+  describe('production refuses whole-schema undo commands', () => {
+    const savedArgv = process.argv;
+
+    afterEach(() => {
+      process.argv = savedArgv;
+    });
+
+    const withArgs = (...args: string[]) => {
+      process.argv = ['node', 'sequelize-cli', ...args];
+      return loadWith('meesho_prod');
+    };
+
+    it.each(['db:migrate:undo:all', 'db:seed:undo:all'])(
+      'refuses %s before reading the connection settings',
+      (command) => {
+        const config = withArgs(command, '--debug');
+        // Even with no DB variables at all, the refusal comes first.
+        delete process.env.DB_HOST;
+        expect(() => config.production).toThrow(
+          `Refusing to run "${command}" with NODE_ENV=production`,
+        );
+      },
+    );
+
+    it('still allows db:migrate, db:migrate:status and a single db:migrate:undo', () => {
+      for (const command of [
+        'db:migrate',
+        'db:migrate:status',
+        'db:migrate:undo',
+      ]) {
+        expect(withArgs(command).production.database).toBe('meesho_prod');
+      }
+    });
+
+    it('does not restrict undo:all outside production', () => {
+      const config = withArgs('db:migrate:undo:all');
+      expect(config.development.database).toBe('meesho_prod');
+    });
+  });
 });

@@ -45,6 +45,19 @@ function fromEnv() {
 }
 
 // Getters: only the environment sequelize-cli actually selects is evaluated.
+/** sequelize-cli commands that wipe the whole schema / all seed data: never allowed in production. */
+const PRODUCTION_FORBIDDEN_COMMANDS = ['db:migrate:undo:all', 'db:seed:undo:all'];
+
+function assertAllowedInProduction(argv) {
+  const forbidden = argv.slice(2).find((arg) => PRODUCTION_FORBIDDEN_COMMANDS.includes(arg));
+  if (forbidden) {
+    throw new Error(
+      `Refusing to run "${forbidden}" with NODE_ENV=production: it reverts everything. ` +
+        'Undo specific migrations explicitly (db:migrate:undo --name <migration>) instead.',
+    );
+  }
+}
+
 module.exports = {
   get development() {
     return fromEnv();
@@ -60,6 +73,8 @@ module.exports = {
     return config;
   },
   get production() {
+    // Checked before the variables are read and before sequelize-cli opens any connection.
+    assertAllowedInProduction(process.argv);
     return fromEnv();
   },
 };

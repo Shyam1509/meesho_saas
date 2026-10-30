@@ -1,6 +1,7 @@
 import { Logger, Module } from '@nestjs/common';
 import { SequelizeModule, SequelizeModuleOptions } from '@nestjs/sequelize';
 import { AppConfigService } from '../config/app-config.service';
+import { MODELS } from './models';
 
 const sqlLogger = new Logger('Sequelize');
 
@@ -28,6 +29,8 @@ const sqlLogger = new Logger('Sequelize');
           // (mysql2's default connection charset is already utf8mb4.)
           define: { underscored: true },
           pool: { max: 5, min: 0, acquire: 10_000, idle: 10_000 },
+          // Every model is registered here; the schema itself comes only from migrations.
+          models: [...MODELS],
           autoLoadModels: true,
           synchronize: false,
           retryAttempts: 3,
