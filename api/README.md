@@ -3,7 +3,8 @@
 NestJS 11 + Sequelize v6 (MySQL 8). Milestone 1 (foundation): config validation,
 structured logging, error envelope, health check, Swagger, migration tooling.
 Milestone 2 (database and tenancy): 14 tables via migrations + Sequelize models, documented in
-[`db/SCHEMA.md`](db/SCHEMA.md). No auth, endpoints or imports yet.
+[`db/SCHEMA.md`](db/SCHEMA.md). Milestone 3 (auth and authorization): server-side sessions, CSRF
+protection, rate limiting, workspaces, members and seller accounts with owner/member roles. No imports yet.
 The repository-level README covers the whole project.
 
 ## Setup
@@ -29,8 +30,92 @@ The repository-level README covers the whole project.
 
 ## Endpoints
 
-- `GET /api/v1/health` → 200 `{ status: "ok", db: "up", ... }` or 503 `{ status: "degraded", db: "down", ... }`
-- Swagger UI `/api/docs`, OpenAPI JSON `/api/docs-json`
+All under `/api/v1`; full request/response shapes in Swagger UI `/api/docs` (OpenAPI JSON `/api/docs-json`).
+Everything requires a session unless marked public. ids in JSON are strings; timestamps are ISO-8601 UTC.
+
+| Endpoint | Who | Result |
+| --- | --- | --- |
+| `GET /health` | public | 200 `{ status: "ok", db: "up", ... }` or 503 `{ status: "degraded", db: "down", ... }` |
+| `GET /auth/config` | public | `{ registrationEnabled }` |
+| `GET /auth/csrf` | public | 204, sets the `msaas_xsrf` cookie |
+| `POST /auth/register` | public | 201 MeResponse + session cookie; 403 when disabled; 409 email taken |
+| `POST /auth/login` | public | 200 MeResponse + session cookie; 401 `Invalid email or password.`; 429 |
+| `POST /auth/logout` | public | 204; revokes the presented session, clears the cookie |
+| `GET /auth/me` | signed in | `{ user, workspaces: [{ id, name, role }] }` |
+| `GET` / `POST /workspaces` | signed in | list (with the caller's role) / create (caller becomes owner) |
+| `GET /workspaces/:workspaceId`, `.../members` | member | workspace / member list |
+| `PATCH /workspaces/:workspaceId` | owner | rename |
+| `GET /workspaces/:workspaceId/accounts` | member | seller accounts, all statuses |
+| `POST /workspaces/:workspaceId/accounts` | owner | add a seller account (409 on a duplicate name / supplier id) |
+| `GET /accounts/:accountId` | member | one seller account |
+| `PATCH /accounts/:accountId` | owner | edit / disable / re-enable |
+| `DELETE /accounts/:accountId` | owner | disable (idempotent; accounts are never deleted) |
+
+## Authentication and authorization
+
+- **Passwords**: Argon2id (64 MiB, t=3, p=4), 12–128 characters, no composition rules; rehashed at login
+  when the parameters change.
+- **Emails**: trimmed, lower-cased, and printable ASCII only (no spaces, control, invisible or fullwidth
+  characters; anything else is a 400 on `email`). `users.email`'s `utf8mb4_0900_as_ci` collation ignores
+  soft hyphens, zero-width characters and character width, so a lookalike would otherwise match an existing
+  row while getting a fresh rate-limit key. Internationalised addresses are not supported.
+- **Sessions**: server-side. Login/registration create a `user_sessions` row and set an opaque random token
+  (32 bytes, base64url) in the `msaas_sid` cookie (`__Host-msaas_sid` when `COOKIE_SECURE=true`): HttpOnly,
+  SameSite=Strict, Path=/, Max-Age = absolute lifetime. Only the token's SHA-256 is stored. A session ends
+  on logout, after `SESSION_IDLE_MINUTES` without requests, after `SESSION_ABSOLUTE_HOURS`, or when the user
+  is disabled. Login/registration revoke any session the browser presented (no fixation).
+- **Default deny**: a global guard requires a valid session on every route; `@Public()` opts out (health,
+  auth config/csrf/register/login/logout). No/invalid/expired/revoked session or disabled user → 401.
+- **CSRF** (cookie auth needs it): (1) SameSite=Strict session cookie; (2) double submit: every
+  POST/PUT/PATCH/DELETE must send header `X-XSRF-TOKEN` equal to the readable `msaas_xsrf` cookie (Angular's
+  `withXsrfConfiguration({ cookieName: 'msaas_xsrf', headerName: 'X-XSRF-TOKEN' })`), compared in constant
+  time; (3) an `Origin` header, when present on such a request, must be in `CORS_ORIGINS`. Failure → 403.
+  Any response to a request without the cookie seeds it (e.g. the first `GET /auth/me`); login, register
+  and logout rotate it.
+- **Rate limits** (in memory, one instance; a shared store is a Milestone 9 decision), all 429 with
+  `Retry-After`:
+  - `AUTH_RATE_LIMIT_PER_MINUTE` requests per client IP to login and to register;
+  - failed logins, applied whether or not the email exists: 5 per (email, client IP) per 15 minutes block
+    that pair only (a stranger cannot lock the real user out of their own IP), and 50 per email from all
+    IPs per 15 minutes block the email everywhere (bounds distributed guessing; reaching it also blocks the
+    owner until the window ends). IPs are grouped like the throttler (IPv6 by /64).
+  - A successful login clears its own (email, IP) counter only. The per-email counter is not cleared: it
+    caps the guesses one account can receive per window, so a success must not hand out fresh guesses.
+  - Memory is bounded (50,000 pairs, 20,000 emails). When full, expired windows go first, then the
+    not-yet-blocked entry with the fewest failures; a blocked entry is never evicted early, so flooding the
+    table with new emails evicts the flood's own entries, not a victim's counter. What remains: a
+    single-failure entry can be pushed out by a flood, and if every slot holds a blocked entry new keys are
+    not tracked until windows expire (filling it takes ~250,000 failed logins in 15 minutes for pairs,
+    ~1,000,000 for emails, each also subject to the per-IP limit).
+- **No enumeration at login**: unknown email, wrong password and disabled user get the same 401 and the
+  same Argon2 work. Registration's 409 does reveal a registered email: accepted, because registration is
+  off by default (`AUTH_REGISTRATION_ENABLED`) and rate limited.
+- **Roles**: `owner` ⊇ `member`. `WorkspaceAccessService.requireWorkspace` / `requireAccount` resolve a
+  client id with one query joined to the caller's membership: not a member (or missing) → 404, member
+  without the role → 403. Later queries use only the ids it returns.
+- **Audit**: workspace created/renamed and seller account created/updated/disabled/enabled are written to
+  `audit_logs` (changed fields only) in the same transaction as the change.
+- **Logs**: request URLs are logged without their query string; Cookie, Set-Cookie, Authorization and
+  X-XSRF-TOKEN are redacted; login success logs the user id, failures never log the email.
+- **Caching**: every `/api/v1` response (errors included) carries `Cache-Control: no-store`.
+- Deferred: invitations / role changes, password change and reset, logout of all sessions, email
+  verification, CLI user creation, distributed rate limits, `trust proxy` (Milestones 8/9).
+
+### Security notes and known limitations
+
+- The XSRF cookie keeps the name `msaas_xsrf` (no `__Host-` prefix) even when `COOKIE_SECURE=true`,
+  because the SPA reads it by that name. It is still Secure, SameSite=Strict and Path=/; a sibling
+  subdomain that planted its own value would also need a request from an allowed Origin, which the Origin
+  check refuses, and the SameSite=Strict session cookie is not sent on cross-site requests.
+- No cap on sessions or workspaces per user (ended sessions are deleted at the next login; active ones
+  accumulate until they expire).
+- No global cap on concurrent Argon2 operations (64 MiB each); only the per-IP limit protects login and
+  register from memory/CPU exhaustion.
+- Swagger UI and the OpenAPI JSON are served without authentication (decide for production in M9).
+- Rate limiters and the failed-login limiter live in process memory: correct for one API instance only,
+  and reset on restart.
+- `trust proxy` is not set, so the client IP is the TCP peer. Behind a reverse proxy every client would
+  share the proxy's IP for both limits until this is configured (M9).
 
 Errors always use `{ "error": { "code", "message", "requestId", "details"? } }`; codes and
 their HTTP status live in `src/common/errors/error-codes.ts`. Every response carries an
@@ -40,6 +125,10 @@ their HTTP status live in `src/common/errors/error-codes.ts`. Every response car
 
 - Schema changes only via migrations in `db/migrations` (CommonJS). The app never calls `sync()`.
 - Read configuration through `AppConfigService`, not `process.env`.
+- New routes are protected by default; mark public ones with `@Public()`. Resolve every workspace/account
+  id through `WorkspaceAccessService` and use the returned ids. Validate path ids with `ParseIdPipe`.
+- Write timestamps through models, not raw-SQL replacements: Sequelize formats `Date` replacements in the
+  machine's local time zone, while models use the connection's UTC setting.
 - DECIMAL (money) columns come back as strings; convert deliberately.
 - Models live in `src/database/models` (one per table, registered in `DatabaseModule`); never return a
   model instance from a controller, map it to a DTO. `tsconfig.json` sets

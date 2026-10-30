@@ -1,0 +1,160 @@
+<app-auth-layout>
+  <h1 class="text-xl font-semibold tracking-tight text-slate-900">Create an account</h1>
+  <p class="mt-1 text-sm text-slate-600">You will own a new workspace for your seller accounts.</p>
+
+  @if (serverError(); as message) {
+    <div
+      #errorAlert
+      role="alert"
+      tabindex="-1"
+      class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+    >
+      {{ message }}
+    </div>
+  }
+
+  <form
+    [formGroup]="form"
+    (ngSubmit)="submit()"
+    novalidate
+    class="mt-6 space-y-4"
+    [attr.aria-busy]="submitting()"
+  >
+    <div>
+      <label for="register-display-name" class="block text-sm font-medium text-slate-800">
+        Your name <span class="font-normal text-slate-600">(optional)</span>
+      </label>
+      <input
+        id="register-display-name"
+        type="text"
+        formControlName="displayName"
+        autocomplete="name"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.displayName) ? 'true' : null"
+        [attr.aria-describedby]="
+          showError(form.controls.displayName) ? 'register-display-name-error' : null
+        "
+      />
+      @if (showError(form.controls.displayName)) {
+        <p id="register-display-name-error" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.displayName, messages.displayName) }}
+        </p>
+      }
+    </div>
+
+    <div>
+      <label for="register-email" class="block text-sm font-medium text-slate-800">Email</label>
+      <input
+        id="register-email"
+        type="email"
+        formControlName="email"
+        autocomplete="email"
+        spellcheck="false"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.email) ? 'true' : null"
+        [attr.aria-describedby]="showError(form.controls.email) ? 'register-email-error' : null"
+      />
+      @if (showError(form.controls.email)) {
+        <p id="register-email-error" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.email, messages.email) }}
+        </p>
+      }
+    </div>
+
+    <div>
+      <label for="register-password" class="block text-sm font-medium text-slate-800">
+        Password
+      </label>
+      <input
+        id="register-password"
+        type="password"
+        formControlName="password"
+        autocomplete="new-password"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.password) ? 'true' : null"
+        [attr.aria-describedby]="
+          showError(form.controls.password)
+            ? 'register-password-hint register-password-error'
+            : 'register-password-hint'
+        "
+      />
+      <p id="register-password-hint" class="mt-1 text-xs text-slate-600">
+        {{ passwordMinLength }} to {{ passwordMaxLength }} characters. A long phrase is easiest to
+        remember.
+      </p>
+      @if (showError(form.controls.password)) {
+        <p id="register-password-error" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.password, messages.password) }}
+        </p>
+      }
+    </div>
+
+    <div>
+      <label for="register-confirm-password" class="block text-sm font-medium text-slate-800">
+        Confirm password
+      </label>
+      <input
+        id="register-confirm-password"
+        type="password"
+        formControlName="confirmPassword"
+        autocomplete="new-password"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.confirmPassword) ? 'true' : null"
+        [attr.aria-describedby]="
+          showError(form.controls.confirmPassword) ? 'register-confirm-password-error' : null
+        "
+      />
+      @if (showError(form.controls.confirmPassword)) {
+        <p id="register-confirm-password-error" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.confirmPassword, messages.confirmPassword) }}
+        </p>
+      }
+    </div>
+
+    <div>
+      <label for="register-workspace-name" class="block text-sm font-medium text-slate-800">
+        Workspace name <span class="font-normal text-slate-600">(optional)</span>
+      </label>
+      <input
+        id="register-workspace-name"
+        type="text"
+        formControlName="workspaceName"
+        autocomplete="organization"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.workspaceName) ? 'true' : null"
+        [attr.aria-describedby]="
+          showError(form.controls.workspaceName)
+            ? 'register-workspace-name-hint register-workspace-name-error'
+            : 'register-workspace-name-hint'
+        "
+      />
+      <p id="register-workspace-name-hint" class="mt-1 text-xs text-slate-600">
+        Left blank, it is called "My workspace". You can rename it later.
+      </p>
+      @if (showError(form.controls.workspaceName)) {
+        <p id="register-workspace-name-error" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.workspaceName, messages.workspaceName) }}
+        </p>
+      }
+    </div>
+
+    <button
+      type="submit"
+      class="w-full rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+      [attr.aria-disabled]="submitting() ? 'true' : null"
+    >
+      {{ submitting() ? 'Creating account…' : 'Create account' }}
+    </button>
+  </form>
+
+  <p authFooter class="mt-4 text-center text-sm text-slate-600">
+    Already have an account?
+    <a
+      routerLink="/login"
+      [queryParams]="safeReturn() ? { returnUrl: safeReturn() } : {}"
+      class="rounded-sm font-medium text-accent-700 underline hover:text-accent-800"
+    >
+      Sign in
+    </a>
+  </p>
+</app-auth-layout>

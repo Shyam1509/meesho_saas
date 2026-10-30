@@ -14,6 +14,7 @@ import {
   GENERIC_SERVER_ERROR_MESSAGE,
 } from './error-codes';
 import type { ErrorResponseDto } from './error-response.dto';
+import { FieldConflictException } from './field-conflict.exception';
 import { RequestValidationException } from './request-validation.exception';
 
 export interface ErrorEnvelope {
@@ -78,7 +79,10 @@ export function toErrorEnvelope(
     const body: ErrorResponseDto = {
       error: { code, message: messageFromHttpException(exception), requestId },
     };
-    if (exception instanceof RequestValidationException) {
+    if (
+      exception instanceof RequestValidationException ||
+      exception instanceof FieldConflictException
+    ) {
       body.error.details = exception.details;
     }
     return { status, body };

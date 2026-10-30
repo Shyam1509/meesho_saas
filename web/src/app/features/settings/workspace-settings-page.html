@@ -1,0 +1,148 @@
+<h1 class="text-2xl font-semibold tracking-tight text-slate-900">Workspace settings</h1>
+
+@if (workspace(); as ws) {
+  <section
+    aria-labelledby="workspace-details-heading"
+    class="mt-6 max-w-2xl rounded-lg border border-slate-200 bg-white p-5"
+  >
+    <h2 id="workspace-details-heading" class="text-base font-semibold text-slate-900">Workspace</h2>
+
+    <dl class="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+      <dt class="text-slate-600">Name</dt>
+      <dd class="font-medium text-slate-900">{{ ws.name }}</dd>
+      <dt class="text-slate-600">Your role</dt>
+      <dd class="font-medium text-slate-900">{{ roleText() }}</dd>
+    </dl>
+
+    @if (isOwner()) {
+      @if (renameError(); as message) {
+        <div
+          #renameErrorAlert
+          role="alert"
+          tabindex="-1"
+          class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+        >
+          {{ message }}
+        </div>
+      }
+
+      <form
+        [formGroup]="form"
+        (ngSubmit)="rename()"
+        novalidate
+        class="mt-5 border-t border-slate-200 pt-5"
+        [attr.aria-busy]="renaming()"
+      >
+        <label for="workspace-name" class="block text-sm font-medium text-slate-800">
+          Rename workspace
+        </label>
+        <div class="mt-1 flex flex-wrap items-start gap-3">
+          <input
+            id="workspace-name"
+            type="text"
+            formControlName="name"
+            autocomplete="off"
+            class="block w-full max-w-sm rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+            [attr.aria-invalid]="showError(form.controls.name) ? 'true' : null"
+            [attr.aria-describedby]="showError(form.controls.name) ? 'workspace-name-error' : null"
+          />
+          <button
+            type="submit"
+            class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+            [attr.aria-disabled]="renaming() ? 'true' : null"
+          >
+            {{ renaming() ? 'Saving…' : 'Save name' }}
+          </button>
+        </div>
+        @if (showError(form.controls.name)) {
+          <p id="workspace-name-error" class="mt-1 text-sm text-red-700">
+            {{ errorMessage(form.controls.name, messages.name) }}
+          </p>
+        }
+      </form>
+      <div role="status" aria-live="polite">
+        @if (renameNotice()) {
+          <p class="mt-3 text-sm text-green-800">{{ renameNotice() }}</p>
+        }
+      </div>
+    } @else {
+      <p class="mt-4 text-sm text-slate-600">Only owners can rename this workspace.</p>
+    }
+  </section>
+
+  <section
+    aria-labelledby="workspace-members-heading"
+    class="mt-6 max-w-3xl"
+    [attr.aria-busy]="members().kind === 'loading'"
+    [attr.data-state]="members().kind"
+  >
+    <h2 id="workspace-members-heading" class="text-base font-semibold text-slate-900">Members</h2>
+    <p class="mt-1 text-sm text-slate-600">
+      Inviting, removing and changing the role of members arrives in a later milestone. This list is
+      read-only.
+    </p>
+
+    @let state = members();
+    @if (state.kind === 'loading') {
+      <p role="status" class="mt-4 text-sm text-slate-700">Loading members…</p>
+    } @else if (state.kind === 'error') {
+      <div role="alert" class="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+        <p class="font-medium text-red-800">The members could not be loaded.</p>
+        <p class="mt-1 text-red-800">{{ state.message }}</p>
+        <button
+          type="button"
+          class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          (click)="retryMembers()"
+        >
+          Try again
+        </button>
+      </div>
+    } @else if (state.members.length === 0) {
+      <p class="mt-4 text-sm text-slate-700">No members to show.</p>
+    } @else {
+      <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <caption class="sr-only">
+            Members of
+            {{
+              ws.name
+            }}
+          </caption>
+          <thead class="bg-slate-50">
+            <tr>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Name</th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Email</th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Role</th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Joined</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            @for (member of state.members; track member.userId) {
+              <tr>
+                <th scope="row" class="px-4 py-3 text-left font-medium text-slate-900">
+                  @if (member.displayName; as name) {
+                    {{ name }}
+                  } @else {
+                    <span aria-hidden="true">—</span>
+                    <span class="sr-only">No name set</span>
+                  }
+                </th>
+                <td class="px-4 py-3 text-slate-700">{{ member.email }}</td>
+                <td class="px-4 py-3 text-slate-700">{{ roleLabel(member.role) }}</td>
+                <td class="px-4 py-3 text-slate-700">
+                  <time [attr.datetime]="member.joinedAt">{{
+                    member.joinedAt | date: 'd MMM y'
+                  }}</time>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+} @else {
+  <p class="mt-4 text-sm text-slate-700">
+    You are not a member of any workspace yet, so there are no settings to show.
+  </p>
+}

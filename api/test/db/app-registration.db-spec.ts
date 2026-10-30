@@ -9,7 +9,7 @@ import { assertTestEnvironment } from './sequelize-cli';
 
 /** Own file: Nest's connection re-binds the model classes, so it must not share them with other specs. */
 describe('DatabaseModule model registration', () => {
-  it('registers all 14 models on the app connection and never calls sync()', async () => {
+  it('registers every model (15) on the app connection and never calls sync()', async () => {
     assertTestEnvironment();
     const syncSpy = jest.spyOn(BaseSequelize.prototype, 'sync');
     const moduleRef = await Test.createTestingModule({
@@ -20,6 +20,7 @@ describe('DatabaseModule model registration', () => {
       expect(Object.keys(sequelize.models).sort()).toEqual(
         MODELS.map((m) => m.name).sort(),
       );
+      expect(MODELS).toHaveLength(15);
       // Queries work against the migrated tables without any sync.
       await expect(sequelize.models.Order.count()).resolves.toEqual(
         expect.any(Number),

@@ -16,7 +16,7 @@ and profit are never mixed up.
 | 0 | Repository audit | Done |
 | 1 | Foundation: NestJS + Angular structure, env validation, logging, health endpoint, Swagger, MySQL connection, migration tooling | Done |
 | 2 | Database and tenancy: identity/workspace/account/import tables, domain tables | Done (14 tables, see [`api/db/SCHEMA.md`](api/db/SCHEMA.md)) |
-| 3 | Auth and workspace authorization (owner/member), cross-tenant denial tests | Not started |
+| 3 | Auth and workspace authorization (owner/member), cross-tenant denial tests | Done (sign-in, workspaces, seller accounts; see `api/README.md`) |
 | 4 | Import pipeline: CSV orders, XLSX settlements, preview, validation, idempotency, status history | Not started |
 | 5 | Orders, settlements, reconciliation | Not started |
 | 6 | Products, effective-dated costs, expenses | Not started |
@@ -24,23 +24,30 @@ and profit are never mixed up.
 | 8 | UX hardening | Not started |
 | 9 | Release readiness | Not started |
 
-What works today: `GET /api/v1/health` (API + database check), Swagger UI, the Angular app shell with all nine
-screens in the navigation, and an Overview panel showing live API/database status. Every other screen is a
-placeholder that names the milestone it is planned for. The database schema for every MVP feature exists
-(users, workspaces, members, seller accounts, imports, products and costs, orders and status history,
-settlements, expenses, reconciliation runs, audit log), with tenant isolation enforced by composite foreign keys;
-no endpoints use it yet.
+What works today:
+- **Sign-in**: create an account (when registration is enabled), sign in, sign out. Every screen and API endpoint
+  except health and the sign-in endpoints requires a session.
+- **Workspaces**: each user owns or belongs to workspaces with the role `owner` or `member`; a switcher in the header
+  picks the current one. Workspace settings shows the name (owners can rename it) and a read-only member list.
+- **Seller accounts**: list the workspace's Meesho accounts; owners add, edit, disable and re-enable them. Changes
+  are recorded in the audit log.
+- `GET /api/v1/health` (API + database check), Swagger UI, and an Overview panel with live API/database status.
+
+Orders, settlements, products, expenses, imports and reports are still placeholders that name their milestone. The
+database schema for all of them exists, with tenant isolation enforced by composite foreign keys.
 
 ## Architecture
 
 ```
 meesho_saas/
   api/       NestJS 11 REST API under /api/v1 (TypeScript)
-    src/       config/ (env validation), common/ (errors, logging), database/ (+ models/), health/
+    src/       config/ (env validation), common/ (errors, logging, http), database/ (+ models/), health/,
+               auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/
     db/        sequelize-cli: config.js, migrations/, seeders/ (CommonJS: the CLI cannot run TS), SCHEMA.md
     test/      e2e tests (supertest) and db/ schema tests, both against the real test database
   web/       Angular 21 standalone app + Tailwind CSS 4
-    src/app/   core/ (API token, health service, title), layout/shell, features/, shared/
+    src/app/   core/ (API client, auth state + guards, workspaces, seller accounts, health, title), layout/shell,
+               features/ (auth, overview, seller-accounts, settings), shared/
   scripts/   dev-mysql.ps1, an optional local MySQL helper for Windows
 ```
 
@@ -104,9 +111,12 @@ Cross-cutting pieces already in place in `api/`:
 4. **Install** (in `api/` and in `web/`): `npm ci`.
    If the drive holding npm's cache is full, point it elsewhere first, e.g. `set npm_config_cache=D:\npm-cache`.
 5. **Create the tables**: `npm run db:migrate` (development) in `api/`; the test scripts migrate the test database
-   themselves. `npm run db:migrate:status` should list 14 migrations as `up`.
+   themselves. `npm run db:migrate:status` should list 15 migrations as `up`.
 6. **Run**: `npm run start:dev` in `api/` (http://localhost:3100) and `npm start` in `web/` (http://localhost:4300,
    which proxies `/api` to the API).
+7. **First user**: set `AUTH_REGISTRATION_ENABLED=true` in `api/.env`, open http://localhost:4300, choose
+   "Create an account". This creates your user, a workspace you own, and signs you in. Keep registration off
+   anywhere other people can reach the API.
 
 ## Environment variables (`api/`)
 
@@ -121,6 +131,11 @@ Cross-cutting pieces already in place in `api/`:
 | `DB_PASSWORD` | yes | none | Must not be empty |
 | `CORS_ORIGINS` | no | `http://localhost:4300` | Comma-separated allowed browser origins |
 | `LOG_LEVEL` | no | `info` | `fatal`…`trace` or `silent`; always silent under `NODE_ENV=test` |
+| `AUTH_REGISTRATION_ENABLED` | no | `false` | Allow `POST /auth/register` (self sign-up) |
+| `COOKIE_SECURE` | no | `true` in production, else `false` | Secure session cookie (`__Host-` name); `false` is refused in production |
+| `SESSION_IDLE_MINUTES` | no | `720` | Sign out after this much inactivity |
+| `SESSION_ABSOLUTE_HOURS` | no | `168` | Sign out this long after sign-in, regardless of activity |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | no | `10` | Sign-in and sign-up requests per minute per client IP |
 
 `api/.env.example` holds placeholders only. Never commit `.env` files, credentials or production data.
 
@@ -136,7 +151,7 @@ Run from `api/`. Plain scripts use `.env` (or real environment variables when `N
 | `npm run db:migrate:undo` | Roll back the last migration (dev DB) |
 | `npm run db:migrate:undo:all` / `npm run db:test:migrate:undo:all` | Roll back every migration (refused when `NODE_ENV=production`) |
 
-There are 14 migrations, one table each (`api/db/migrations`). Every one has a tested `down`: `npm run test:db`
+There are 15 migrations, one table each (`api/db/migrations`). Every one has a tested `down`: `npm run test:db`
 migrates an empty test database, rolls everything back and migrates again. Table design, keys, delete rules and the
 idempotency rules for orders, status history and settlements are documented in
 [`api/db/SCHEMA.md`](api/db/SCHEMA.md); conventions for new migrations are in `api/README.md`.
@@ -177,7 +192,12 @@ unique.
 
 ## Limitations (current)
 
-- The schema exists, but there is no authentication, no endpoint that uses it, no import and no financial data yet.
+- No import and no financial data yet (Milestones 4 to 7).
+- Member management (invite, change role, remove), password change and reset, signing out other sessions and email
+  verification are not built yet. Registration reveals whether an email is already registered (409); it is off by
+  default and rate-limited for that reason.
+- Sign-in rate limits are kept in memory, so they only work with a single API instance, and the API does not yet
+  trust a reverse proxy's client IP (Milestone 9). Only plain ASCII email addresses are accepted.
 - No real Meesho report samples have been tested yet; the import parser will first be built on synthetic fixtures.
   Whether reported prices are per unit or per line is decided in Milestone 4 from real files.
 - Some rules MySQL cannot enforce are left to application code: a settlement entry must not supersede itself
@@ -215,6 +235,16 @@ the command line.
   source row. No table stores Meesho passwords, cookies, tokens or OTPs (a schema test checks this).
 - Logs never contain request or response bodies; credential headers are redacted.
 - Client errors are safe to show; stack traces stay in server logs.
-- Planned (Milestone 3): hashed passwords, workspace roles (`owner`, `member`), authorization enforced in API
-  services and queries, rate-limited auth endpoints.
+- Passwords are hashed with Argon2id (12 to 128 characters). Sessions are server-side: the browser holds a random
+  token in an `HttpOnly`, `SameSite=Strict` cookie and the database stores only its SHA-256 hash, so sign-out and
+  disabling a user take effect immediately. Sessions end after 12 hours idle or 7 days.
+- Cross-site request forgery is blocked three ways: the `SameSite=Strict` cookie, a double-submit token
+  (`msaas_xsrf` cookie echoed in the `X-XSRF-TOKEN` header on every POST/PUT/PATCH/DELETE), and an `Origin` check
+  against `CORS_ORIGINS`.
+- Authorization is checked in the API for every workspace and account request, from the signed-in user's
+  membership: someone outside a workspace gets 404 (its existence is not revealed), a `member` attempting an
+  `owner` action gets 403. Tests prove both for every endpoint.
+- Sign-in failures give one message for unknown email and wrong password. Repeated failures are limited per email
+  and client IP, plus a looser cap per email, and per IP overall. API responses are sent with
+  `Cache-Control: no-store`. Details and remaining limits: `api/README.md`.
 - No automated Meesho login, OTP interception, scraping, or stored seller passwords/cookies.

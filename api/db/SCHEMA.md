@@ -1,7 +1,8 @@
-# Database schema (Milestone 2)
+# Database schema (Milestones 2 and 3)
 
 MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrations in
-`db/migrations` (one table per migration, `20261030000001` … `20261030000014`); the app never syncs.
+`db/migrations` (one table per migration: `20261030000001` … `20261030000014` in Milestone 2,
+`20261030000015-create-user-sessions` in Milestone 3); the app never syncs.
 `test/db/*.db-spec.ts` asserts everything below against a freshly migrated `meesho_test`.
 
 ## Conventions
@@ -9,7 +10,7 @@ MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrat
 - Primary keys: `id BIGINT UNSIGNED AUTO_INCREMENT`. Every FK column is `BIGINT UNSIGNED`.
 - Timestamps: `created_at` / `updated_at` are `DATETIME(3) NOT NULL`, written in UTC by the app
   (no DB default). Append-only tables (`import_rows`, `order_status_events`, `audit_logs`) have
-  `created_at` only.
+  `created_at` only; so does `user_sessions`, whose `last_used_at` / `revoked_at` record its changes.
 - Money: `DECIMAL(12,2)`, read back as strings. **NULL = missing / not reported, 0 = zero.** No money
   column has a default. One exception in precision: `product_cost_history.unit_cost` is `DECIMAL(12,4)`
   (lot-based unit costs such as ₹1000/3); line cost = `unit_cost × quantity`, rounded half-up to 2 dp at
@@ -20,13 +21,16 @@ MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrat
   constants in `src/database/models/enums.ts` must list the same values (asserted by the schema spec).
 - Collations: external identifiers (`sku`, `catalog_id`, `sub_order_no`, `order_no`, `packet_id`,
   `transaction_id`, `meesho_supplier_id`) are `utf8mb4_bin` (exact, case-sensitive). Hashes
-  (`file_sha256`, `active_file_sha256`, `row_hash`, `entry_fingerprint`) are `CHAR(64) ascii_bin`.
+  (`file_sha256`, `active_file_sha256`, `row_hash`, `entry_fingerprint`, `user_sessions.token_hash`) are
+  `CHAR(64) ascii_bin`.
   `users.email` is `utf8mb4_0900_as_ci` (case-insensitive, accent-sensitive). Everything else uses the
   table default.
 - Constraint names: `fk_<table>_<what>`, `uq_<table>_<what>`, `ix_<table>_<what>`, `ck_<table>_<what>`.
-- Delete rule: `RESTRICT` (history must survive) except the three `CASCADE`s listed below.
-  `ON UPDATE` is always `RESTRICT`.
-- No credentials anywhere: no password/cookie/token/OTP/secret column except `users.password_hash`.
+- Delete rule: `RESTRICT` (history must survive) except the four `CASCADE`s listed below
+  (`workspace_members` ×2, `import_rows`, `user_sessions`). `ON UPDATE` is always `RESTRICT`.
+- No credentials anywhere: no password/cookie/token/OTP/secret column except two one-way hashes:
+  `users.password_hash` (Argon2id) and `user_sessions.token_hash` (SHA-256 of the session token; the token
+  itself exists only in the user's HttpOnly cookie).
 
 ## Tenancy
 
@@ -79,6 +83,7 @@ Workspace-only rows of `expenses` and `audit_logs` are still checked by their si
 | `expenses` | Manual expense, `scope` workspace/account, `amount > 0`, INR | — | workspace; account (composite); created_by → users |
 | `reconciliation_runs` | One matching run: `trigger_type`, status, counts; has `updated_at` (status changes) | — | account, import job (composite); triggered_by → users |
 | `audit_logs` | Append-only audit trail; scope none / workspace / workspace + account; `actor_user_id` NULL = system; before/after JSON without secrets or full rows | — | workspace; account (composite); actor → users |
+| `user_sessions` | Server-side sign-in session (M3): SHA-256 `token_hash`, `last_used_at` (idle timeout), `absolute_expires_at`, `revoked_at`; no IP / user agent | `uq_user_sessions_token_hash`; plain indexes on `user_id`, `absolute_expires_at` | user **CASCADE** |
 
 CHECKs beyond the enumerations:
 
@@ -96,6 +101,15 @@ Not enforceable in MySQL: `superseded_by_entry_id <> id` (a CHECK may not refere
 column, error 3818, and creating triggers is not granted). The M5 supersession code must refuse
 self-references and cycles.
 
+## Sessions (Milestone 3)
+
+- A session is valid while `revoked_at IS NULL`, `now < absolute_expires_at` and
+  `now - last_used_at < SESSION_IDLE_MINUTES`, and its user is `active`. `last_used_at` is refreshed at
+  most every 5 minutes, so the idle timeout can end a session up to 5 minutes early, never late.
+- Logout and a new login/registration presenting a session set `revoked_at` (the row stays until the
+  user's next login). At each login the user's revoked and expired rows are deleted.
+- `users.last_login_at` is set at registration and at each successful login.
+
 ## Deletion behaviour
 
 - A workspace with seller accounts (or expenses / audit rows) cannot be deleted; a workspace without them
@@ -103,6 +117,7 @@ self-references and cycles.
 - Deleting an import job removes its staging `import_rows`, but fails once any canonical row
   (order, status event, settlement entry, reconciliation run) references the job or one of its rows.
 - Products, orders, accounts and users referenced by history cannot be deleted (archive / disable instead).
+  A user's sessions go with the user (CASCADE).
 
 ## Idempotency rules
 
@@ -140,7 +155,7 @@ cost per start date. No such row ⇒ cost **unknown** (profit incomplete), never
 ## Deferred
 
 - `bank_payouts`: optional until bank statements are imported (blueprint §5).
-- Sessions / refresh tokens: Milestone 3 (auth).
+- Refresh tokens: none (server-side sessions instead, Milestone 3).
 
 ## ER diagram
 
@@ -174,6 +189,7 @@ erDiagram
   workspaces |o--o{ audit_logs : "scope"
   seller_accounts |o--o{ audit_logs : "scope"
   users |o--o{ audit_logs : "actor"
+  users ||--o{ user_sessions : "signs in (cascade)"
 
   users {
     bigint id PK
@@ -292,5 +308,13 @@ erDiagram
     varchar action
     varchar entity_type
     varchar entity_id
+  }
+  user_sessions {
+    bigint id PK
+    bigint user_id FK
+    char token_hash UK "sha256, ascii_bin"
+    datetime last_used_at
+    datetime absolute_expires_at
+    datetime revoked_at "nullable"
   }
 ```

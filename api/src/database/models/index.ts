@@ -9,6 +9,7 @@ import { Product } from './product.model';
 import { ReconciliationRun } from './reconciliation-run.model';
 import { SellerAccount } from './seller-account.model';
 import { SettlementEntry } from './settlement-entry.model';
+import { UserSession } from './user-session.model';
 import { User } from './user.model';
 import { WorkspaceMember } from './workspace-member.model';
 import { Workspace } from './workspace.model';
@@ -18,7 +19,7 @@ import { Workspace } from './workspace.model';
  * DatabaseModule (synchronize: false): the schema is owned by migrations, models never sync it.
  *
  * Models are persistence objects. Never return a model instance raw from a controller: map it to a
- * response DTO, so internal columns (password_hash, storage keys, audit payloads, ...) cannot leak and the
+ * response DTO, so internal columns (password_hash, token_hash, storage keys, audit payloads, ...) cannot leak and the
  * API shape does not change when the schema does.
  */
 export const MODELS = [
@@ -36,6 +37,7 @@ export const MODELS = [
   Expense,
   ReconciliationRun,
   AuditLog,
+  UserSession,
 ] as const;
 
 export {
@@ -51,6 +53,7 @@ export {
   SellerAccount,
   SettlementEntry,
   User,
+  UserSession,
   Workspace,
   WorkspaceMember,
 };

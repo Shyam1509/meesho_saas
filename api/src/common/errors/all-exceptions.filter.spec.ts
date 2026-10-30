@@ -21,6 +21,7 @@ import {
 import { Type } from 'class-transformer';
 import { AllExceptionsFilter, toErrorEnvelope } from './all-exceptions.filter';
 import { GENERIC_SERVER_ERROR_MESSAGE } from './error-codes';
+import { FieldConflictException } from './field-conflict.exception';
 import { validationExceptionFactory } from './request-validation.exception';
 
 const REQUEST_ID = 'test-req-0001';
@@ -121,6 +122,33 @@ describe('toErrorEnvelope', () => {
     ]);
     // Rejected values are not echoed back.
     expect(JSON.stringify(body)).not.toContain('not-an-email');
+  });
+
+  it('maps a FieldConflictException to 409 CONFLICT with field details', () => {
+    const { status, body } = toErrorEnvelope(
+      new FieldConflictException('Already in use', [
+        { field: 'displayName', reasons: ['already used'] },
+      ]),
+      REQUEST_ID,
+    );
+
+    expect(status).toBe(409);
+    expect(body).toEqual({
+      error: {
+        code: 'CONFLICT',
+        message: 'Already in use',
+        requestId: REQUEST_ID,
+        details: [{ field: 'displayName', reasons: ['already used'] }],
+      },
+    });
+  });
+
+  it('a plain ConflictException carries no details', () => {
+    const { body } = toErrorEnvelope(
+      new ConflictException('Duplicate'),
+      REQUEST_ID,
+    );
+    expect(body.error).not.toHaveProperty('details');
   });
 
   it('maps an unknown Error to a generic 500 INTERNAL_ERROR without stack or message', () => {

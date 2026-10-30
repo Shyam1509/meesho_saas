@@ -51,6 +51,29 @@ export class AppConfigService {
     return this.config.get('CORS_ORIGINS', { infer: true });
   }
 
+  get authRegistrationEnabled(): boolean {
+    return this.config.get('AUTH_REGISTRATION_ENABLED', { infer: true });
+  }
+
+  /** Secure flag for auth cookies; validateEnv has already resolved the NODE_ENV default. */
+  get cookieSecure(): boolean {
+    return (
+      this.config.get('COOKIE_SECURE', { infer: true }) ?? this.isProduction
+    );
+  }
+
+  get sessionIdleMinutes(): number {
+    return this.config.get('SESSION_IDLE_MINUTES', { infer: true });
+  }
+
+  get sessionAbsoluteHours(): number {
+    return this.config.get('SESSION_ABSOLUTE_HOURS', { infer: true });
+  }
+
+  get authRateLimitPerMinute(): number {
+    return this.config.get('AUTH_RATE_LIMIT_PER_MINUTE', { infer: true });
+  }
+
   /** Effective logger level: always silent under test. */
   get logLevel(): LogLevel {
     return this.isTest

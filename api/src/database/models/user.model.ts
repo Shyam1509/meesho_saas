@@ -11,6 +11,7 @@ import {
 } from 'sequelize-typescript';
 import { USER_STATUSES, type UserStatus } from './enums';
 import type { Attrs, CreationAttrs } from './model-types';
+import { UserSession } from './user-session.model';
 import { WorkspaceMember } from './workspace-member.model';
 import { Workspace } from './workspace.model';
 
@@ -62,4 +63,7 @@ export class User extends Model<Attrs<User>, CreationAttrs<User>> {
 
   @HasMany(() => WorkspaceMember, { foreignKey: 'userId' })
   memberships?: NonAttribute<WorkspaceMember[]>;
+
+  @HasMany(() => UserSession, { foreignKey: 'userId' })
+  sessions?: NonAttribute<UserSession[]>;
 }

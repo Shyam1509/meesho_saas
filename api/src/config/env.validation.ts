@@ -2,9 +2,11 @@ import 'reflect-metadata'; // class-transformer's @Type needs it even outside Ne
 import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   Max,
@@ -36,6 +38,15 @@ function toOriginList(value: unknown): unknown {
     .split(',')
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
+}
+
+/** 'true' / 'false' (any case) become booleans; anything else is left for @IsBoolean to reject. */
+function toBoolean(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const lower = value.toLowerCase();
+  if (lower === 'true') return true;
+  if (lower === 'false') return false;
+  return value;
 }
 
 /**
@@ -83,6 +94,41 @@ export class EnvironmentVariables {
 
   @IsIn(LOG_LEVELS)
   LOG_LEVEL: LogLevel = 'info';
+
+  /** Whether POST /auth/register is open. Off unless explicitly enabled. */
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  AUTH_REGISTRATION_ENABLED: boolean = false;
+
+  /**
+   * Secure flag (and the __Host- prefix) on auth cookies. Unset = NODE_ENV === 'production', resolved in
+   * validateEnv; false is rejected in production.
+   */
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  COOKIE_SECURE?: boolean;
+
+  /** Session idle timeout: minutes without a request before the session ends. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(10)
+  @Max(43_200)
+  SESSION_IDLE_MINUTES: number = 720;
+
+  /** Absolute session lifetime in hours, however active the session is. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(8_760)
+  SESSION_ABSOLUTE_HOURS: number = 168;
+
+  /** Requests per minute per client IP to each of POST /auth/login and POST /auth/register. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10_000)
+  AUTH_RATE_LIMIT_PER_MINUTE: number = 10;
 }
 
 const KNOWN_KEYS: ReadonlyArray<keyof EnvironmentVariables> = [
@@ -95,6 +141,11 @@ const KNOWN_KEYS: ReadonlyArray<keyof EnvironmentVariables> = [
   'DB_PASSWORD',
   'CORS_ORIGINS',
   'LOG_LEVEL',
+  'AUTH_REGISTRATION_ENABLED',
+  'COOKIE_SECURE',
+  'SESSION_IDLE_MINUTES',
+  'SESSION_ABSOLUTE_HOURS',
+  'AUTH_RATE_LIMIT_PER_MINUTE',
 ];
 
 /** Test runs may only touch databases whose name ends in this suffix. */
@@ -146,6 +197,28 @@ export function validateEnv(
   ) {
     names.add('DB_NAME');
     hints.push(`NODE_ENV=test requires DB_NAME to end in "${TEST_DB_SUFFIX}"`);
+  }
+
+  // Auth cookies must carry the Secure flag in production.
+  if (!names.has('COOKIE_SECURE') && !names.has('NODE_ENV')) {
+    if (config.COOKIE_SECURE === undefined) {
+      config.COOKIE_SECURE = config.NODE_ENV === 'production';
+    } else if (config.NODE_ENV === 'production' && !config.COOKIE_SECURE) {
+      names.add('COOKIE_SECURE');
+      hints.push('COOKIE_SECURE=false is not allowed with NODE_ENV=production');
+    }
+  }
+
+  // An idle timeout longer than the absolute lifetime can never apply.
+  if (
+    !names.has('SESSION_IDLE_MINUTES') &&
+    !names.has('SESSION_ABSOLUTE_HOURS') &&
+    config.SESSION_IDLE_MINUTES > config.SESSION_ABSOLUTE_HOURS * 60
+  ) {
+    names.add('SESSION_IDLE_MINUTES');
+    hints.push(
+      'SESSION_IDLE_MINUTES must not exceed SESSION_ABSOLUTE_HOURS * 60',
+    );
   }
 
   if (names.size > 0) {

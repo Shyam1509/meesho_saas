@@ -2,7 +2,7 @@ import { Writable } from 'node:stream';
 import pino from 'pino';
 import { pinoHttp } from 'pino-http';
 import { sanitizeError } from './error-sanitizer';
-import { buildPinoHttpOptions } from './pino-http.options';
+import { buildPinoHttpOptions, stripQueryString } from './pino-http.options';
 
 const SECRET_VALUE = 'seller-9876543210@example.com';
 
@@ -162,5 +162,79 @@ describe('buildPinoHttpOptions (real pino output)', () => {
       expect(entry.req.headers[name]).toBe('[REDACTED]');
     }
     expect(entry.req.headers['user-agent']).toBe('jest');
+  });
+
+  it('redacts the session and XSRF cookies (request) and Set-Cookie (response)', () => {
+    const { lines, stream } = capture();
+    const { logger } = pinoHttp(buildPinoHttpOptions('info'), stream);
+
+    logger.info(
+      {
+        req: {
+          method: 'POST',
+          url: '/api/v1/auth/login',
+          headers: {
+            cookie: 'msaas_sid=s3ss10n-t0k3n; msaas_xsrf=xsrf-t0k3n',
+            'x-xsrf-token': 'xsrf-t0k3n',
+          },
+        },
+        res: {
+          statusCode: 200,
+          getHeaders: () => ({
+            'set-cookie': ['msaas_sid=n3w-s3ss10n; HttpOnly'],
+          }),
+        },
+      },
+      'request completed',
+    );
+
+    expect(lines[0]).not.toContain('t0k3n');
+    expect(lines[0]).not.toContain('n3w-s3ss10n');
+    const entry = JSON.parse(lines[0]) as {
+      req: { headers: Record<string, string> };
+      res: { headers: Record<string, unknown> };
+    };
+    expect(entry.req.headers.cookie).toBe('[REDACTED]');
+    expect(entry.req.headers['x-xsrf-token']).toBe('[REDACTED]');
+    expect(entry.res.headers['set-cookie']).toBe('[REDACTED]');
+  });
+
+  it('logs request URLs without their query string and drops the parsed query', () => {
+    const { lines, stream } = capture();
+    const { logger } = pinoHttp(buildPinoHttpOptions('info'), stream);
+
+    logger.info(
+      {
+        req: {
+          method: 'GET',
+          originalUrl: '/api/v1/orders?email=a%40b.test&token=abc123',
+          query: { email: 'a@b.test', token: 'abc123' },
+          headers: {},
+        },
+      },
+      'request',
+    );
+
+    const entry = JSON.parse(lines[0]) as { req: Record<string, unknown> };
+    expect(entry.req.url).toBe('/api/v1/orders');
+    expect(entry.req).not.toHaveProperty('query');
+    expect(lines[0]).not.toContain('abc123');
+    expect(lines[0]).not.toContain('a@b.test');
+  });
+});
+
+describe('stripQueryString', () => {
+  it.each([
+    ['/a/b?x=1', '/a/b'],
+    ['/a/b#frag', '/a/b'],
+    ['/a?x=1#f', '/a'],
+    ['/plain', '/plain'],
+    ['', ''],
+  ])('%s -> %s', (input, expected) => {
+    expect(stripQueryString(input)).toBe(expected);
+  });
+
+  it('leaves non-strings unchanged', () => {
+    expect(stripQueryString(undefined)).toBeUndefined();
   });
 });

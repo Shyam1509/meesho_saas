@@ -15,6 +15,7 @@ import {
   ReconciliationRun,
   SettlementEntry,
   User,
+  UserSession,
   Workspace,
   WorkspaceMember,
   type ImportJobStatus,
@@ -723,6 +724,76 @@ describe('database integrity rules (meesho_test)', () => {
           'uq_users_email',
         );
         await expect(user('josé@example.test')).resolves.toBeDefined();
+      }));
+  });
+
+  describe('user sessions', () => {
+    const session = (userId: number, tokenHash: string, t: Transaction) => {
+      const now = new Date('2026-10-30T10:00:00.000Z');
+      return UserSession.create(
+        {
+          userId,
+          tokenHash,
+          createdAt: now,
+          lastUsedAt: now,
+          absoluteExpiresAt: new Date('2026-11-06T10:00:00.000Z'),
+        },
+        { transaction: t },
+      );
+    };
+    const newUser = (email: string, t: Transaction) =>
+      User.create({ email, passwordHash: 'x' }, { transaction: t });
+
+    it('token_hash is unique across all users', () =>
+      inRollback(sequelize, async (t) => {
+        const a = await newUser('session-a@example.test', t);
+        const b = await newUser('session-b@example.test', t);
+        await session(a.id, fp('a'), t);
+        await expectDbError(
+          session(b.id, fp('a'), t),
+          ER.DUP_ENTRY,
+          'uq_user_sessions_token_hash',
+        );
+        await expect(session(b.id, fp('b'), t)).resolves.toBeDefined();
+      }));
+
+    it('a session must belong to an existing user and is deleted with it (CASCADE)', () =>
+      inRollback(sequelize, async (t) => {
+        const user = await newUser('session-cascade@example.test', t);
+        await expectDbError(
+          session(user.id + 1_000_000, fp('c'), t),
+          ER.NO_REFERENCED_ROW,
+          'fk_user_sessions_user',
+        );
+        await session(user.id, fp('c'), t);
+        await session(user.id, fp('d'), t);
+        const count = () =>
+          UserSession.count({ where: { userId: user.id }, transaction: t });
+        expect(await count()).toBe(2);
+
+        await user.destroy({ transaction: t });
+        expect(await count()).toBe(0);
+      }));
+
+    it('stores DATETIME(3) in UTC with milliseconds; revoked_at starts NULL', () =>
+      inRollback(sequelize, async (t) => {
+        const user = await newUser('session-time@example.test', t);
+        const created = await session(user.id, fp('e'), t);
+        const [row] = await select<{
+          lastUsed: string;
+          revokedAt: string | null;
+        }>(
+          sequelize,
+          `SELECT DATE_FORMAT(last_used_at, '%Y-%m-%d %H:%i:%s.%f') AS lastUsed,
+                  revoked_at AS revokedAt
+           FROM user_sessions WHERE id = ?`,
+          [created.id],
+          t,
+        );
+        expect(row).toEqual({
+          lastUsed: '2026-10-30 10:00:00.000000',
+          revokedAt: null,
+        });
       }));
   });
 

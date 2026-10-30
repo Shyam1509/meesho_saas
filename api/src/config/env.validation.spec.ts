@@ -123,6 +123,86 @@ describe('validateEnv', () => {
     ).toEqual(['PORT']);
   });
 
+  describe('auth settings', () => {
+    it('defaults: registration off, insecure cookies outside production, 12 h idle, 7 d absolute, 10/min', () => {
+      const config = validateEnv(validRaw());
+
+      expect(config.AUTH_REGISTRATION_ENABLED).toBe(false);
+      expect(config.COOKIE_SECURE).toBe(false);
+      expect(config.SESSION_IDLE_MINUTES).toBe(720);
+      expect(config.SESSION_ABSOLUTE_HOURS).toBe(168);
+      expect(config.AUTH_RATE_LIMIT_PER_MINUTE).toBe(10);
+    });
+
+    it('COOKIE_SECURE defaults to true in production', () => {
+      const config = validateEnv({ ...validRaw(), NODE_ENV: 'production' });
+      expect(config.COOKIE_SECURE).toBe(true);
+    });
+
+    it('parses booleans case-insensitively and numbers', () => {
+      const config = validateEnv({
+        ...validRaw(),
+        AUTH_REGISTRATION_ENABLED: 'TRUE',
+        COOKIE_SECURE: 'true',
+        SESSION_IDLE_MINUTES: '30',
+        SESSION_ABSOLUTE_HOURS: '24',
+        AUTH_RATE_LIMIT_PER_MINUTE: '50',
+      });
+
+      expect(config.AUTH_REGISTRATION_ENABLED).toBe(true);
+      expect(config.COOKIE_SECURE).toBe(true);
+      expect(config.SESSION_IDLE_MINUTES).toBe(30);
+      expect(config.SESSION_ABSOLUTE_HOURS).toBe(24);
+      expect(config.AUTH_RATE_LIMIT_PER_MINUTE).toBe(50);
+    });
+
+    it('rejects COOKIE_SECURE=false in production, naming COOKIE_SECURE only', () => {
+      const error = captureError(() =>
+        validateEnv({
+          ...validRaw(),
+          NODE_ENV: 'production',
+          COOKIE_SECURE: 'false',
+        }),
+      );
+
+      expect(error.variables).toEqual(['COOKIE_SECURE']);
+      expect(error.message).toContain('COOKIE_SECURE=false is not allowed');
+    });
+
+    it('allows COOKIE_SECURE=false outside production', () => {
+      expect(
+        validateEnv({ ...validRaw(), COOKIE_SECURE: 'false' }).COOKIE_SECURE,
+      ).toBe(false);
+    });
+
+    it.each([
+      ['AUTH_REGISTRATION_ENABLED', 'yes'],
+      ['COOKIE_SECURE', '1'],
+      ['SESSION_IDLE_MINUTES', '5'],
+      ['SESSION_IDLE_MINUTES', 'abc'],
+      ['SESSION_ABSOLUTE_HOURS', '0'],
+      ['AUTH_RATE_LIMIT_PER_MINUTE', '0'],
+      ['AUTH_RATE_LIMIT_PER_MINUTE', '10001'],
+    ])('rejects %s=%s', (name, value) => {
+      expect(
+        captureError(() => validateEnv({ ...validRaw(), [name]: value }))
+          .variables,
+      ).toEqual([name]);
+    });
+
+    it('rejects an idle timeout longer than the absolute lifetime', () => {
+      const error = captureError(() =>
+        validateEnv({
+          ...validRaw(),
+          SESSION_IDLE_MINUTES: '120',
+          SESSION_ABSOLUTE_HOURS: '1',
+        }),
+      );
+
+      expect(error.variables).toEqual(['SESSION_IDLE_MINUTES']);
+    });
+  });
+
   describe('test-database guard', () => {
     it('rejects NODE_ENV=test with a DB_NAME not ending in _test, naming DB_NAME only', () => {
       const error = captureError(() =>

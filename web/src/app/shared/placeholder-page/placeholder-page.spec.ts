@@ -1,8 +1,12 @@
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { TitleStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 
+import { ME_OWNER } from '../../../testing/test-data';
 import { routes } from '../../app.routes';
+import { provideApiHttpClient } from '../../core/api/provide-api-http-client';
+import { AuthStateService } from '../../core/auth/auth-state.service';
 import { AppTitleStrategy } from '../../core/title/app-title-strategy';
 import { PlaceholderPage, formatMilestones } from './placeholder-page';
 
@@ -23,14 +27,19 @@ describe('PlaceholderPage', () => {
     expect(formatMilestones([2, 3])).toBe('Milestones 2 and 3');
   });
 
+  // These screens sit inside the app shell, which needs a signed-in user. Seller accounts and
+  // Workspace settings are real pages since Milestone 3 (see app.spec.ts and their own specs).
   describe('through the router', () => {
     beforeEach(() => {
       TestBed.configureTestingModule({
         providers: [
           provideRouter(routes, withComponentInputBinding()),
+          provideApiHttpClient(),
+          provideHttpClientTesting(),
           { provide: TitleStrategy, useClass: AppTitleStrategy },
         ],
       });
+      TestBed.inject(AuthStateService).setSession(ME_OWNER);
     });
 
     it.each([
@@ -40,14 +49,12 @@ describe('PlaceholderPage', () => {
       ['/expenses', 'Expenses', 'Milestone 6'],
       ['/imports', 'Imports', 'Milestone 4'],
       ['/reports', 'Reports', 'Milestone 7'],
-      ['/seller-accounts', 'Seller accounts', 'Milestones 2 and 3'],
-      ['/settings', 'Workspace settings', 'Milestone 3'],
     ])('%s shows "%s" planned in %s and sets the page title', async (url, heading, milestone) => {
       const harness = await RouterTestingHarness.create();
-      await harness.navigateByUrl(url, PlaceholderPage);
+      await harness.navigateByUrl(url);
 
       const el = harness.routeNativeElement as HTMLElement;
-      expect(el.querySelector('h1')?.textContent?.trim()).toBe(heading);
+      expect(el.querySelector('app-placeholder-page h1')?.textContent?.trim()).toBe(heading);
       expect(el.textContent).toContain(`Not built yet — planned in ${milestone}.`);
       expect(document.title).toBe(`${heading} · Meesho Seller SaaS`);
     });

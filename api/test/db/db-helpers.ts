@@ -27,7 +27,7 @@ interface CliDbConfig {
   password: string;
 }
 
-/** The 14 tables created by Milestone 2, in migration order. */
+/** Every table the migrations create, in migration order: 14 from Milestone 2, user_sessions from Milestone 3. */
 export const DOMAIN_TABLES = [
   'users',
   'workspaces',
@@ -43,6 +43,7 @@ export const DOMAIN_TABLES = [
   'expenses',
   'reconciliation_runs',
   'audit_logs',
+  'user_sessions',
 ] as const;
 
 /**

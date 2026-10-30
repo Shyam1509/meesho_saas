@@ -1,0 +1,94 @@
+<section
+  [attr.aria-labelledby]="idPrefix + '-heading'"
+  class="rounded-lg border border-slate-200 bg-white p-5"
+>
+  <h2 [id]="idPrefix + '-heading'" class="text-base font-semibold text-slate-900">
+    {{ heading() }}
+  </h2>
+
+  @if (serverError(); as message) {
+    <div
+      #errorAlert
+      role="alert"
+      tabindex="-1"
+      class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+    >
+      {{ message }}
+    </div>
+  }
+
+  <form
+    [formGroup]="form"
+    (ngSubmit)="submit()"
+    novalidate
+    class="mt-4 grid gap-4 sm:grid-cols-2"
+    [attr.aria-busy]="submitting()"
+  >
+    <div>
+      <label [for]="idPrefix + '-display-name'" class="block text-sm font-medium text-slate-800">
+        Display name
+      </label>
+      <input
+        [id]="idPrefix + '-display-name'"
+        type="text"
+        formControlName="displayName"
+        autocomplete="off"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.displayName) ? 'true' : null"
+        [attr.aria-describedby]="
+          showError(form.controls.displayName) ? idPrefix + '-display-name-error' : null
+        "
+      />
+      @if (showError(form.controls.displayName)) {
+        <p [id]="idPrefix + '-display-name-error'" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.displayName, messages.displayName) }}
+        </p>
+      }
+    </div>
+
+    <div>
+      <label [for]="idPrefix + '-supplier-id'" class="block text-sm font-medium text-slate-800">
+        Meesho supplier ID <span class="font-normal text-slate-600">(optional)</span>
+      </label>
+      <input
+        [id]="idPrefix + '-supplier-id'"
+        type="text"
+        formControlName="meeshoSupplierId"
+        autocomplete="off"
+        spellcheck="false"
+        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
+        [attr.aria-invalid]="showError(form.controls.meeshoSupplierId) ? 'true' : null"
+        [attr.aria-describedby]="
+          showError(form.controls.meeshoSupplierId)
+            ? idPrefix + '-supplier-id-hint ' + idPrefix + '-supplier-id-error'
+            : idPrefix + '-supplier-id-hint'
+        "
+      />
+      <p [id]="idPrefix + '-supplier-id-hint'" class="mt-1 text-xs text-slate-600">
+        Letters, numbers, - and _. Leave blank if you do not know it yet.
+      </p>
+      @if (showError(form.controls.meeshoSupplierId)) {
+        <p [id]="idPrefix + '-supplier-id-error'" class="mt-1 text-sm text-red-700">
+          {{ errorMessage(form.controls.meeshoSupplierId, messages.meeshoSupplierId) }}
+        </p>
+      }
+    </div>
+
+    <div class="flex flex-wrap gap-3 sm:col-span-2">
+      <button
+        type="submit"
+        class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+        [attr.aria-disabled]="submitting() ? 'true' : null"
+      >
+        {{ submitting() ? 'Saving…' : account() ? 'Save changes' : 'Save account' }}
+      </button>
+      <button
+        type="button"
+        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="cancel()"
+      >
+        Cancel
+      </button>
+    </div>
+  </form>
+</section>

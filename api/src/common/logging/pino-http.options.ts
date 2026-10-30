@@ -15,10 +15,33 @@ export const REDACTED_PATHS = [
   'res.headers["set-cookie"]',
 ];
 
+/** Logged form of a request URL: path only. Query strings can carry tokens, emails or filters. */
+export function stripQueryString(url: unknown): unknown {
+  if (typeof url !== 'string') return url;
+  const end = url.search(/[?#]/);
+  return end === -1 ? url : url.slice(0, end);
+}
+
 /**
- * pino-http options: one log line per request with its request ID, credentials redacted, errors
- * reduced to type/message/stack/code. Request/response bodies are never logged (the default
- * req/res serializers do not include them and nothing here adds them).
+ * Request serializer applied after pino's standard one: the URL loses its query string and the parsed
+ * `query` object is dropped. Headers stay (credential headers are redacted by REDACTED_PATHS).
+ */
+export function serializeRequest(
+  req: Record<string, unknown>,
+): Record<string, unknown> {
+  const logged: Record<string, unknown> = {
+    ...req,
+    url: stripQueryString(req.url),
+  };
+  delete logged.query;
+  return logged;
+}
+
+/**
+ * pino-http options: one log line per request with its request ID, credentials redacted (Cookie,
+ * Set-Cookie, X-XSRF-TOKEN, ...), URLs without query strings, errors reduced to type/message/stack/code.
+ * Request/response bodies are never logged (the default req/res serializers do not include them and
+ * nothing here adds them).
  */
 export function buildPinoHttpOptions(level: LogLevel): Options {
   return {
@@ -29,10 +52,9 @@ export function buildPinoHttpOptions(level: LogLevel): Options {
       if (!res.headersSent) res.setHeader(REQUEST_ID_HEADER, id);
       return id;
     },
-    // TODO(M3): decide whether to strip or allowlist query strings in logged URLs (req.url / req.query).
     redact: { paths: REDACTED_PATHS, censor: '[REDACTED]' },
-    // Applies to every `err` key logged through this logger, including Nest Logger.error(err).
-    serializers: { err: sanitizeError },
+    // `err` applies to every error logged through this logger, including Nest Logger.error(err).
+    serializers: { err: sanitizeError, req: serializeRequest },
     customLogLevel: (
       _req: IncomingMessage,
       res: ServerResponse,

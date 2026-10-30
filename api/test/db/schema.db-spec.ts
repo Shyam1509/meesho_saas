@@ -22,7 +22,7 @@ import {
   select,
 } from './db-helpers';
 
-/** Schema contract of Milestone 2, asserted from information_schema of the migrated meesho_test. */
+/** Schema contract (Milestones 2 and 3), asserted from information_schema of the migrated meesho_test. */
 
 interface ColumnRow {
   tbl: string;
@@ -46,6 +46,9 @@ interface FkRow {
 }
 
 const APPEND_ONLY = ['import_rows', 'order_status_events', 'audit_logs'];
+
+/** Tables with created_at but no updated_at: the append-only ones, plus user_sessions (last_used_at / revoked_at). */
+const NO_UPDATED_AT = [...APPEND_ONLY, 'user_sessions'];
 
 const ACCOUNT_SCOPED = [
   'import_jobs',
@@ -95,6 +98,7 @@ const HASH_COLUMNS = [
   'import_jobs.file_sha256',
   'import_rows.row_hash',
   'settlement_entries.entry_fingerprint',
+  'user_sessions.token_hash',
 ];
 
 const UNIQUE_KEYS = [
@@ -113,6 +117,7 @@ const UNIQUE_KEYS = [
   'seller_accounts.uq_seller_accounts_workspace_supplier(workspace_id,meesho_supplier_id)',
   'settlement_entries.uq_settlement_entries_account_fingerprint(seller_account_id,entry_fingerprint)',
   'settlement_entries.uq_settlement_entries_account_id(seller_account_id,id)',
+  'user_sessions.uq_user_sessions_token_hash(token_hash)',
   'users.uq_users_email(email)',
   'workspace_members.uq_workspace_members_workspace_user(workspace_id,user_id)',
 ];
@@ -154,6 +159,7 @@ const FOREIGN_KEYS = [
   'audit_logs.fk_audit_logs_workspace(workspace_id) -> workspaces(id)',
   'audit_logs.fk_audit_logs_account(workspace_id,seller_account_id) -> seller_accounts(workspace_id,id)',
   'audit_logs.fk_audit_logs_actor_user(actor_user_id) -> users(id)',
+  `user_sessions.fk_user_sessions_user(user_id) -> users(id)${CASCADE}`,
 ];
 
 /** Enumerated CHECKs and the model constants that must list the same values. */
@@ -230,7 +236,7 @@ describe('schema contract (information_schema of meesho_test)', () => {
     await sequelize.close();
   });
 
-  it('has exactly the 14 domain tables (+ sequelize_meta), all InnoDB utf8mb4_0900_ai_ci', async () => {
+  it('has exactly the 15 tables (+ sequelize_meta), all InnoDB utf8mb4_0900_ai_ci', async () => {
     expect(await listTables(sequelize)).toEqual(
       [...DOMAIN_TABLES, 'sequelize_meta'].sort(),
     );
@@ -269,7 +275,7 @@ describe('schema contract (information_schema of meesho_test)', () => {
     }
   });
 
-  it('created_at is DATETIME(3) NOT NULL everywhere; updated_at only on non-append-only tables', () => {
+  it('created_at is DATETIME(3) NOT NULL everywhere; updated_at everywhere except NO_UPDATED_AT', () => {
     for (const table of DOMAIN_TABLES) {
       const created = column(table, 'created_at');
       expect([table, created.columnType, created.nullable]).toEqual([
@@ -280,7 +286,7 @@ describe('schema contract (information_schema of meesho_test)', () => {
       const updated = columns.find(
         (c) => c.tbl === table && c.col === 'updated_at',
       );
-      if (APPEND_ONLY.includes(table)) {
+      if (NO_UPDATED_AT.includes(table)) {
         expect([table, updated]).toEqual([table, undefined]);
       } else {
         expect([table, updated?.columnType, updated?.nullable]).toEqual([
@@ -338,7 +344,7 @@ describe('schema contract (information_schema of meesho_test)', () => {
     expect(tenancyFk('expenses')?.del).toBe('RESTRICT');
   });
 
-  it('foreign keys: exact list; CASCADE only on workspace_members and import_rows; ON UPDATE always RESTRICT', () => {
+  it('foreign keys: exact list; CASCADE only on workspace_members, import_rows and user_sessions; ON UPDATE always RESTRICT', () => {
     const actual = fks
       .map(
         (fk) =>
@@ -446,10 +452,31 @@ describe('schema contract (information_schema of meesho_test)', () => {
     ]);
   });
 
-  it('stores no credentials: no password/cookie/token/otp/secret column except users.password_hash', () => {
+  it('stores no credentials: no password/cookie/token/otp/secret column except the two hashes', () => {
     const suspicious = columns
       .map(key)
-      .filter((name) => /password|cookie|token|otp|secret/i.test(name));
-    expect(suspicious).toEqual(['users.password_hash']);
+      .filter((name) => /password|cookie|token|otp|secret/i.test(name))
+      .sort();
+    // Both hold one-way hashes only: Argon2id of the password, SHA-256 of the session token.
+    expect(suspicious).toEqual([
+      'user_sessions.token_hash',
+      'users.password_hash',
+    ]);
+  });
+
+  it('user_sessions: token_hash CHAR(64), expiry columns NOT NULL, revoked_at nullable, no IP / user agent', () => {
+    expect(
+      columns
+        .filter((c) => c.tbl === 'user_sessions')
+        .map((c) => `${c.col} ${c.columnType} ${c.nullable}`),
+    ).toEqual([
+      'id bigint unsigned NO',
+      'user_id bigint unsigned NO',
+      'token_hash char(64) NO',
+      'created_at datetime(3) NO',
+      'last_used_at datetime(3) NO',
+      'absolute_expires_at datetime(3) NO',
+      'revoked_at datetime(3) YES',
+    ]);
   });
 });
