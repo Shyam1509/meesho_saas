@@ -1,0 +1,66 @@
+<section
+  aria-labelledby="api-status-heading"
+  class="rounded-lg border border-slate-200 bg-white p-5"
+  [attr.data-state]="state()"
+  [attr.aria-busy]="loading()"
+>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h2 id="api-status-heading" class="text-base font-semibold text-slate-900">API status</h2>
+    <button
+      type="button"
+      class="rounded-md bg-accent-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+      [attr.aria-disabled]="loading() ? 'true' : null"
+      (click)="checkAgain()"
+    >
+      Check again
+    </button>
+  </div>
+
+  <div role="status" class="mt-4 text-sm">
+    @switch (state()) {
+      @case ('loading') {
+        <p class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+            Checking
+          </span>
+          <span class="text-slate-700">Checking the API and database…</span>
+        </p>
+      }
+      @case ('ok') {
+        <p class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-800 ring-1 ring-green-700/20">
+            Operational
+          </span>
+          <span class="text-slate-700">API is up. Database is up.</span>
+        </p>
+      }
+      @case ('degraded') {
+        <p class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-700/20">
+            Degraded
+          </span>
+          <span class="text-slate-700">API is up, but the database is down.</span>
+        </p>
+        <p class="mt-2 text-slate-600">Screens that need data will not work until the database is back.</p>
+      }
+      @case ('unreachable') {
+        <p class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-800 ring-1 ring-red-700/20">
+            Unreachable
+          </span>
+          <span class="text-slate-700">The API could not be reached.</span>
+        </p>
+        <p class="mt-2 text-slate-600">{{ unreachableReason() }}</p>
+      }
+    }
+  </div>
+
+  <p class="mt-4 text-xs text-slate-600">
+    Last checked:
+    @if (checkedAt(); as at) {
+      <time [attr.datetime]="at.toISOString()">{{ at | date: 'd MMM y, HH:mm:ss' }}</time>
+    } @else {
+      not yet
+    }
+  </p>
+</section>

@@ -1,0 +1,8 @@
+// sequelize-cli paths. Migrations/seeders are CommonJS JS because sequelize-cli cannot run TS.
+const path = require('node:path');
+
+module.exports = {
+  config: path.resolve(__dirname, 'db', 'config.js'),
+  'migrations-path': path.resolve(__dirname, 'db', 'migrations'),
+  'seeders-path': path.resolve(__dirname, 'db', 'seeders'),
+};
