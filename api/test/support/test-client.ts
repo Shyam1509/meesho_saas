@@ -82,6 +82,40 @@ export class TestClient {
     return this.send('delete', path, options);
   }
 
+  /**
+   * multipart/form-data POST with one file in `fieldName` (default "file") plus text fields, sent like
+   * the browser would (cookies + X-XSRF-TOKEN unless `csrf: false`).
+   */
+  async upload(
+    path: string,
+    file: { name: string; content: Buffer | string; fieldName?: string },
+    fields: Record<string, string> = {},
+    options: Pick<RequestOptions, 'csrf' | 'headers'> = {},
+  ): Promise<Response> {
+    let req = request(this.server).post(`${API}${path}`);
+    const cookieHeader = [...this.cookies]
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ');
+    if (cookieHeader) req = req.set('Cookie', cookieHeader);
+    if (this.clientIp) req = req.set(TEST_CLIENT_IP_HEADER, this.clientIp);
+    const csrf = options.csrf ?? true;
+    const token = typeof csrf === 'string' ? csrf : csrf ? this.xsrf : null;
+    if (token) req = req.set('X-XSRF-TOKEN', token);
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      req = req.set(name, value);
+    }
+    for (const [name, value] of Object.entries(fields)) {
+      req = req.field(name, value);
+    }
+    const content =
+      typeof file.content === 'string'
+        ? Buffer.from(file.content, 'utf8')
+        : file.content;
+    const res = await req.attach(file.fieldName ?? 'file', content, file.name);
+    this.absorb(res);
+    return res;
+  }
+
   /** GET /auth/csrf so the jar holds an XSRF token. */
   async primeCsrf(): Promise<void> {
     await this.get('/auth/csrf');

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { sanitizeError } from '../logging/error-sanitizer';
+import { ApiException } from './api.exception';
 import { getRequestId, REQUEST_ID_HEADER } from '../logging/request-id';
 import {
   ERROR_CODE_STATUS,
@@ -67,7 +68,10 @@ export function toErrorEnvelope(
 ): ErrorEnvelope {
   if (exception instanceof HttpException) {
     const status = exception.getStatus();
-    const code = errorCodeForStatus(status);
+    const code =
+      exception instanceof ApiException && status < 500
+        ? exception.code
+        : errorCodeForStatus(status);
     if (status >= 500) {
       return {
         status,
@@ -83,6 +87,8 @@ export function toErrorEnvelope(
       exception instanceof RequestValidationException ||
       exception instanceof FieldConflictException
     ) {
+      body.error.details = exception.details;
+    } else if (exception instanceof ApiException && exception.details) {
       body.error.details = exception.details;
     }
     return { status, body };

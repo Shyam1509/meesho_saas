@@ -11,6 +11,7 @@ import { hasRole } from './roles';
 
 export const WORKSPACE_NOT_FOUND_MESSAGE = 'Workspace not found.';
 export const ACCOUNT_NOT_FOUND_MESSAGE = 'Seller account not found.';
+export const IMPORT_NOT_FOUND_MESSAGE = 'Import not found.';
 export const INSUFFICIENT_ROLE_MESSAGE =
   'You do not have permission to perform this action.';
 
@@ -107,6 +108,51 @@ export class WorkspaceAccessService {
     const { role, ...account } = row;
     return { account, role };
   }
+
+  /** The import job (via its account's workspace) if the caller is a member with `minRole`. */
+  async requireImportJob(
+    userId: number,
+    importId: string,
+    minRole: WorkspaceRole,
+    options: AccessOptions = {},
+  ): Promise<ImportJobAccess> {
+    const [row] = await this.sequelize.query<
+      ImportJobAccess['importJob'] & {
+        accountStatus: SellerAccountStatus;
+        role: WorkspaceRole;
+      }
+    >(
+      `SELECT j.id, j.workspace_id AS workspaceId, j.seller_account_id AS sellerAccountId,
+              a.status AS accountStatus, m.role
+       FROM import_jobs j
+       JOIN seller_accounts a ON a.id = j.seller_account_id AND a.workspace_id = j.workspace_id
+       JOIN workspace_members m ON m.workspace_id = a.workspace_id AND m.user_id = :userId
+       WHERE j.id = CAST(:importId AS UNSIGNED)${lockClause(options)}`,
+      {
+        type: QueryTypes.SELECT,
+        replacements: { userId, importId },
+        transaction: options.transaction,
+      },
+    );
+    if (!row) throw new NotFoundException(IMPORT_NOT_FOUND_MESSAGE);
+    assertRole(row.role, minRole);
+    const { role, accountStatus, ...importJob } = row;
+    return { importJob, accountStatus, role };
+  }
+}
+
+/**
+ * An import job the caller may see: resolved through its seller account to the caller's membership in
+ * one query (requireImportJob). Same rules as accounts: missing or not a member → 404, too low a role → 403.
+ */
+export interface ImportJobAccess {
+  importJob: {
+    id: number;
+    workspaceId: number;
+    sellerAccountId: number;
+  };
+  accountStatus: SellerAccountStatus;
+  role: WorkspaceRole;
 }
 
 function assertRole(role: WorkspaceRole, minRole: WorkspaceRole): void {

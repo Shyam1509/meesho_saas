@@ -74,6 +74,21 @@ export class AppConfigService {
     return this.config.get('AUTH_RATE_LIMIT_PER_MINUTE', { infer: true });
   }
 
+  /** Upload size limit for imports, in MB. */
+  get importMaxFileMb(): number {
+    return this.config.get('IMPORT_MAX_FILE_MB', { infer: true });
+  }
+
+  /** Upload size limit for imports, in bytes (MB × 1,048,576). */
+  get importMaxFileBytes(): number {
+    return this.importMaxFileMb * 1024 * 1024;
+  }
+
+  /** Most non-blank data rows per import file. */
+  get importMaxRows(): number {
+    return this.config.get('IMPORT_MAX_ROWS', { infer: true });
+  }
+
   /** Effective logger level: always silent under test. */
   get logLevel(): LogLevel {
     return this.isTest

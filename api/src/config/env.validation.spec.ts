@@ -51,7 +51,7 @@ describe('validateEnv', () => {
     const config = validateEnv(raw);
 
     expect(config.PORT).toBe(3100);
-    expect(config.CORS_ORIGINS).toEqual(['http://localhost:4300']);
+    expect(config.CORS_ORIGINS).toEqual(['http://localhost:4310']);
     expect(config.LOG_LEVEL).toBe('info');
   });
 
@@ -200,6 +200,53 @@ describe('validateEnv', () => {
       );
 
       expect(error.variables).toEqual(['SESSION_IDLE_MINUTES']);
+    });
+  });
+
+  describe('import settings', () => {
+    it('defaults: 10 MB per file, 50 000 rows', () => {
+      const config = validateEnv(validRaw());
+      expect(config.IMPORT_MAX_FILE_MB).toBe(10);
+      expect(config.IMPORT_MAX_ROWS).toBe(50_000);
+    });
+
+    it('parses numbers, including the bounds', () => {
+      expect(
+        validateEnv({
+          ...validRaw(),
+          IMPORT_MAX_FILE_MB: '1',
+          IMPORT_MAX_ROWS: '200000',
+        }),
+      ).toEqual(
+        expect.objectContaining({
+          IMPORT_MAX_FILE_MB: 1,
+          IMPORT_MAX_ROWS: 200_000,
+        }),
+      );
+      expect(
+        validateEnv({
+          ...validRaw(),
+          IMPORT_MAX_FILE_MB: '50',
+          IMPORT_MAX_ROWS: '1',
+        }),
+      ).toEqual(
+        expect.objectContaining({ IMPORT_MAX_FILE_MB: 50, IMPORT_MAX_ROWS: 1 }),
+      );
+    });
+
+    it.each([
+      ['IMPORT_MAX_FILE_MB', '0'],
+      ['IMPORT_MAX_FILE_MB', '51'],
+      ['IMPORT_MAX_FILE_MB', '2.5'],
+      ['IMPORT_MAX_FILE_MB', 'ten'],
+      ['IMPORT_MAX_ROWS', '0'],
+      ['IMPORT_MAX_ROWS', '200001'],
+      ['IMPORT_MAX_ROWS', '-5'],
+    ])('rejects %s=%s, naming only that variable', (name, value) => {
+      expect(
+        captureError(() => validateEnv({ ...validRaw(), [name]: value }))
+          .variables,
+      ).toEqual([name]);
     });
   });
 

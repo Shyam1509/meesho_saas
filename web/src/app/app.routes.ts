@@ -50,7 +50,17 @@ export const routes: Routes = [
       placeholderRoute('settlements', 'Settlements & reconciliation', [5]),
       placeholderRoute('products', 'Products & costs', [6]),
       placeholderRoute('expenses', 'Expenses', [6]),
-      placeholderRoute('imports', 'Imports', [4]),
+      {
+        path: 'imports',
+        title: 'Imports',
+        loadComponent: () => import('./features/imports/imports-page').then((m) => m.ImportsPage),
+      },
+      {
+        path: 'imports/:importId',
+        title: 'Import details',
+        loadComponent: () =>
+          import('./features/imports/import-detail-page').then((m) => m.ImportDetailPage),
+      },
       placeholderRoute('reports', 'Reports', [7]),
       {
         path: 'seller-accounts',

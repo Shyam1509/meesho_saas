@@ -1,0 +1,292 @@
+@let item = job();
+
+@if (item.status === 'failed') {
+  <div
+    class="mb-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+    data-testid="failure"
+  >
+    <p class="font-semibold">This import failed. Nothing from the file was imported.</p>
+    @if (item.failureMessage; as reason) {
+      <p class="mt-1">{{ reason }}</p>
+    }
+    <p class="mt-1">You can retry it, or discard it and upload the file again.</p>
+  </div>
+}
+
+<section [attr.aria-labelledby]="'import-review-file-' + item.id">
+  <h3 [id]="'import-review-file-' + item.id" class="text-base font-semibold text-slate-900">
+    File
+  </h3>
+  <dl
+    class="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]"
+    data-testid="file-details"
+  >
+    <dt class="text-slate-600">Report type</dt>
+    <dd class="font-medium text-slate-900">{{ reportType() }}</dd>
+    <dt class="text-slate-600">File</dt>
+    <dd class="text-slate-900">
+      <span class="font-medium break-all">{{ item.originalFilename }}</span>
+      <span class="text-slate-600"> ({{ item.fileSizeBytes | fileSize }})</span>
+    </dd>
+    <dt class="text-slate-600">Report period</dt>
+    <dd class="text-slate-900">{{ item.reportPeriodStart | dateRange: item.reportPeriodEnd }}</dd>
+    <dt class="text-slate-600">{{ dataAsOfLabel() }}</dt>
+    <dd class="text-slate-900">
+      <time [attr.datetime]="item.dataAsOf">{{ item.dataAsOf | displayDateTime }}</time>
+    </dd>
+    <dt class="text-slate-600">Status</dt>
+    <dd><app-import-status-badge [status]="item.status" /></dd>
+    <dt class="text-slate-600">Uploaded</dt>
+    <dd class="text-slate-900">
+      {{ uploadedBy() ?? missing }} ·
+      <time [attr.datetime]="item.createdAt">{{ item.createdAt | displayDateTime }}</time>
+    </dd>
+    @if (item.confirmedAt) {
+      <dt class="text-slate-600">Confirmed</dt>
+      <dd class="text-slate-900">
+        <time [attr.datetime]="item.confirmedAt">{{ item.confirmedAt | displayDateTime }}</time>
+      </dd>
+    }
+    @if (item.completedAt) {
+      <dt class="text-slate-600">Completed</dt>
+      <dd class="text-slate-900">
+        <time [attr.datetime]="item.completedAt">{{ item.completedAt | displayDateTime }}</time>
+      </dd>
+    }
+  </dl>
+</section>
+
+<section [attr.aria-labelledby]="'import-review-counts-' + item.id" class="mt-6">
+  <h3 [id]="'import-review-counts-' + item.id" class="text-base font-semibold text-slate-900">
+    Rows
+  </h3>
+  <dl class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3" data-testid="row-counts">
+    <div class="rounded-md border border-slate-200 bg-white p-3">
+      <dt class="text-xs font-medium text-slate-600">Total rows</dt>
+      <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+        {{ item.totalRows | count }}
+      </dd>
+    </div>
+    <div class="rounded-md border border-slate-200 bg-white p-3">
+      <dt class="text-xs font-medium text-slate-600">Valid rows</dt>
+      <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+        {{ item.validRows | count }}
+      </dd>
+    </div>
+    <div
+      class="rounded-md border p-3"
+      [class]="(item.errorRows ?? 0) > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'"
+    >
+      <dt class="text-xs font-medium text-slate-600">Rows with errors</dt>
+      <dd
+        class="mt-1 text-lg font-semibold tabular-nums"
+        [class]="(item.errorRows ?? 0) > 0 ? 'text-red-800' : 'text-slate-900'"
+      >
+        {{ item.errorRows | count }}
+      </dd>
+    </div>
+  </dl>
+
+  @if (item.preview; as preview) {
+    <h4 class="mt-5 text-sm font-semibold text-slate-900">
+      {{ item.status === 'previewed' ? 'What the import will do' : 'Planned at upload' }}
+    </h4>
+    <dl class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-testid="planned-counts">
+      <div class="rounded-md border border-slate-200 bg-white p-3">
+        <dt class="text-xs font-medium text-slate-600">New records</dt>
+        <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+          {{ preview.planned.insert | count }}
+        </dd>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-3">
+        <dt class="text-xs font-medium text-slate-600">Updates</dt>
+        <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+          {{ preview.planned.update | count }}
+        </dd>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-3">
+        <dt class="text-xs font-medium text-slate-600">Unchanged</dt>
+        <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+          {{ preview.planned.unchanged | count }}
+        </dd>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-3">
+        <dt class="text-xs font-medium text-slate-600">
+          History only <span class="block font-normal">(older than the saved status)</span>
+        </dt>
+        <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+          {{ preview.planned.historyOnly | count }}
+        </dd>
+      </div>
+      <div class="rounded-md border border-slate-200 bg-white p-3">
+        <dt class="text-xs font-medium text-slate-600">Status events</dt>
+        <dd class="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
+          {{ preview.planned.statusEvents | count }}
+        </dd>
+      </div>
+    </dl>
+  }
+</section>
+
+@if (item.preview) {
+  <section [attr.aria-labelledby]="'import-review-sheets-' + item.id" class="mt-6">
+    <h3 [id]="'import-review-sheets-' + item.id" class="text-base font-semibold text-slate-900">
+      Sheets and columns
+    </h3>
+    <p class="mt-1 text-sm text-slate-600">
+      Check that the columns you expect were recognised. Ignored columns are not read or stored.
+    </p>
+    @if (usedSheets().length > 0) {
+      <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="min-w-full divide-y divide-slate-200 text-sm" data-testid="sheets-table">
+          <caption class="sr-only">
+            Sheets read from the file
+          </caption>
+          <thead class="bg-slate-50">
+            <tr>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Sheet</th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                Read as
+              </th>
+              <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">Rows</th>
+              <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">Valid</th>
+              <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+                Errors
+              </th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                Recognised columns
+              </th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                Missing optional columns
+              </th>
+              <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                Ignored columns
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            @for (sheet of usedSheets(); track sheet.name) {
+              <tr>
+                <th scope="row" class="px-4 py-2.5 text-left align-top font-medium text-slate-900">
+                  {{ sheet.name }}
+                </th>
+                <td class="px-4 py-2.5 align-top text-slate-700">{{ sheetUse(sheet) }}</td>
+                <td class="px-4 py-2.5 text-right align-top tabular-nums">
+                  {{ sheet.rows | count }}
+                </td>
+                <td class="px-4 py-2.5 text-right align-top tabular-nums">
+                  {{ sheet.validRows | count }}
+                </td>
+                <td class="px-4 py-2.5 text-right align-top tabular-nums">
+                  {{ sheet.errorRows | count }}
+                </td>
+                <td class="min-w-48 px-4 py-2.5 align-top text-slate-700">
+                  {{ columnList(sheet.recognisedColumns) }}
+                </td>
+                <td class="min-w-48 px-4 py-2.5 align-top text-slate-700">
+                  {{ columnList(sheet.missingOptionalColumns) }}
+                </td>
+                <td class="min-w-48 px-4 py-2.5 align-top text-slate-700">
+                  {{ columnList(sheet.ignoredColumns) }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+    @if (ignoredSheets().length > 0) {
+      <p class="mt-3 text-sm text-slate-700" data-testid="ignored-sheets">
+        <span class="font-medium">Ignored sheets:</span> {{ ignoredSheets().join(', ') }}
+      </p>
+    }
+  </section>
+
+  @if (item.status !== 'cancelled') {
+  <section [attr.aria-labelledby]="'import-review-samples-' + item.id" class="mt-6">
+    <h3 [id]="'import-review-samples-' + item.id" class="text-base font-semibold text-slate-900">
+      Sample rows
+    </h3>
+    @if (sampleGroups().length === 0) {
+      <p class="mt-2 text-sm text-slate-700">No valid rows to show.</p>
+    } @else {
+      <p class="mt-1 text-sm text-slate-600">The first valid rows, as they will be imported.</p>
+      @for (group of sampleGroups(); track group.key) {
+        <div
+          class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white"
+          data-testid="sample-table"
+        >
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <caption class="px-4 pt-3 text-left text-sm font-medium text-slate-800">
+              {{ group.sheetName ? 'Sample rows from ' + group.sheetName : 'Sample rows' }}
+            </caption>
+            <thead class="bg-slate-50">
+              <tr>
+                <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Row</th>
+                <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                  Action
+                </th>
+                @for (column of group.columns; track column.field) {
+                  <th
+                    scope="col"
+                    class="px-4 py-2.5 font-semibold whitespace-nowrap text-slate-700"
+                    [class.text-right]="isMoney(column.field)"
+                    [class.text-left]="!isMoney(column.field)"
+                  >
+                    {{ column.label }}
+                  </th>
+                }
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              @for (row of group.rows; track row.id) {
+                <tr>
+                  <th scope="row" class="px-4 py-2 text-left font-medium text-slate-900 tabular-nums">
+                    {{ row.rowNumber }}
+                  </th>
+                  <td class="px-4 py-2 whitespace-nowrap text-slate-700">
+                    {{ row.action ?? missing }}
+                  </td>
+                  @for (cell of row.cells; track $index) {
+                    <td
+                      class="px-4 py-2 whitespace-nowrap text-slate-900"
+                      [class.text-right]="isMoney(group.columns[$index].field)"
+                      [class.tabular-nums]="isMoney(group.columns[$index].field)"
+                    >
+                      {{ cell }}
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  </section>
+  }
+}
+
+@if (!item.preview) {
+  <p class="mt-6 text-sm text-slate-700">No preview details are stored for this import.</p>
+}
+
+@if (item.status === 'cancelled') {
+  <p
+    class="mt-6 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+    data-testid="rows-deleted"
+  >
+    This import was discarded, so the rows read from the file, including the rows with errors, were
+    deleted. Only the file details and counts above are kept.
+  </p>
+} @else {
+  <section [attr.aria-labelledby]="'import-review-errors-' + item.id" class="mt-6">
+    <h3 [id]="'import-review-errors-' + item.id" class="text-base font-semibold text-slate-900">
+      Rows with errors
+    </h3>
+    <p class="mt-1 text-sm text-slate-600">
+      Rows with errors are never imported. Row numbers are as in the file, counting the header row.
+    </p>
+    <app-import-errors-table class="mt-3" [importId]="item.id" [errorRows]="item.errorRows" />
+  </section>
+}

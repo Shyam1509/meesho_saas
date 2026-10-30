@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
+import { AppConfigService } from '../src/config/app-config.service';
 
 /**
  * Runs against the real test database: NODE_ENV=test (set by the test:e2e script)
@@ -49,13 +50,14 @@ describe('API foundation (e2e)', () => {
   });
 
   it('CORS: allowed origin gets credentials + exposed x-request-id; others get no allow-origin', async () => {
+    if (!app) throw new Error('app not initialised');
+    // Whatever the test environment configures (default http://localhost:4310).
+    const origin = app.get(AppConfigService).corsOrigins[0];
     const allowed = await request(server)
       .get('/api/v1/health')
-      .set('Origin', 'http://localhost:4300')
+      .set('Origin', origin)
       .expect(200);
-    expect(allowed.headers['access-control-allow-origin']).toBe(
-      'http://localhost:4300',
-    );
+    expect(allowed.headers['access-control-allow-origin']).toBe(origin);
     expect(allowed.headers['access-control-allow-credentials']).toBe('true');
     expect(allowed.headers['access-control-expose-headers']).toBe(
       'x-request-id',

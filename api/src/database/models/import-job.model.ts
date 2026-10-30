@@ -20,6 +20,36 @@ import type { Attrs, CreationAttrs } from './model-types';
 import { SellerAccount } from './seller-account.model';
 import { User } from './user.model';
 
+/** One sheet (or the CSV file, name '') as the parser saw it. Column NAMES only, never values. */
+export interface ImportSheetSummary {
+  name: string;
+  /** Settlement entry type of the sheet, 'compensation_or_recovery' (decided per row), or null (CSV / ignored). */
+  entryType: string | null;
+  ignored: boolean;
+  rows: number;
+  validRows: number;
+  errorRows: number;
+  recognisedColumns: string[];
+  missingOptionalColumns: string[];
+  ignoredColumns: string[];
+}
+
+/** import_jobs.preview_summary (JSON). */
+export interface ImportPreviewSummary {
+  /** Version of the header profile file that parsed the upload. */
+  profileVersion: number;
+  sheets: ImportSheetSummary[];
+  /** Planned at upload time against the data then in the database; confirm recomputes. */
+  planned: {
+    insert: number;
+    update: number;
+    unchanged: number;
+    /** Orders rows older than what is stored: status history only. */
+    historyOnly: number;
+    statusEvents: number;
+  };
+}
+
 /**
  * One uploaded report file for one seller account. Only one 'importing'/'completed' job per
  * (sellerAccountId, reportType, fileSha256): enforced by the generated activeFileSha256 column's unique key;
@@ -87,6 +117,17 @@ export class ImportJob extends Model<
   @Column({ type: DataType.DATEONLY, allowNull: true })
   reportPeriodEnd!: CreationOptional<string | null>;
 
+  /**
+   * When the report's statuses were current: the user-supplied "statuses as of" time (orders CSV), else
+   * the upload time. order_status_events.observed_at is this value (M4).
+   */
+  @Column({ type: DataType.DATE(3), allowNull: true })
+  dataAsOf!: CreationOptional<Date | null>;
+
+  /** What the parser saw (sheets, column names, planned counts). Never row values. */
+  @Column({ type: DataType.JSON, allowNull: true })
+  previewSummary!: CreationOptional<ImportPreviewSummary | null>;
+
   @Column({ type: DataType.STRING(512), allowNull: true })
   storageKey!: CreationOptional<string | null>;
 
@@ -107,6 +148,10 @@ export class ImportJob extends Model<
 
   @Column({ type: DataType.INTEGER.UNSIGNED, allowNull: true })
   unchangedCount!: CreationOptional<number | null>;
+
+  /** Orders rows older than the order's current observation: recorded as status history only. */
+  @Column({ type: DataType.INTEGER.UNSIGNED, allowNull: true })
+  historyOnlyCount!: CreationOptional<number | null>;
 
   @Column({ type: DataType.STRING(64), allowNull: true })
   failureCode!: CreationOptional<string | null>;

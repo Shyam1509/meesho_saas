@@ -15,7 +15,7 @@ All commands run from `web/`. On this machine keep the npm cache on D: (`npm_con
 | Task | Command |
 | --- | --- |
 | Install | `npm ci` |
-| Dev server (http://localhost:4300, proxies `/api` → `http://localhost:3100`) | `npm start` |
+| Dev server (http://localhost:4310, proxies `/api` → `http://localhost:3100`) | `npm start` |
 | Lint (angular-eslint) | `npx ng lint` |
 | Type-check | `npx tsc --noEmit -p tsconfig.app.json` (specs: `-p tsconfig.spec.json`) |
 | Unit tests (Vitest + jsdom, no browser) | `npx ng test --watch=false` |

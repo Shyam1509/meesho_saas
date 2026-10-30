@@ -4,6 +4,7 @@ import type { Sequelize } from 'sequelize-typescript';
 import { hasRole } from './roles';
 import {
   ACCOUNT_NOT_FOUND_MESSAGE,
+  IMPORT_NOT_FOUND_MESSAGE,
   INSUFFICIENT_ROLE_MESSAGE,
   WORKSPACE_NOT_FOUND_MESSAGE,
   WorkspaceAccessService,
@@ -97,5 +98,56 @@ describe('WorkspaceAccessService (query stubbed)', () => {
     await expect(
       service.requireAccount(1, '9', 'owner', { lock: true }),
     ).rejects.toThrow('lock requires a transaction');
+  });
+
+  describe('requireImportJob', () => {
+    it('one query joining the job to its account and the caller membership; returns ids, account status and role', async () => {
+      query.mockResolvedValue([
+        {
+          id: 42,
+          workspaceId: 7,
+          sellerAccountId: 9,
+          accountStatus: 'active',
+          role: 'member',
+        },
+      ]);
+
+      await expect(
+        service.requireImportJob(1, '42', 'member'),
+      ).resolves.toEqual({
+        importJob: { id: 42, workspaceId: 7, sellerAccountId: 9 },
+        accountStatus: 'active',
+        role: 'member',
+      });
+      expect(query).toHaveBeenCalledTimes(1);
+      const [sql, options] = query.mock.calls[0] as [
+        string,
+        { replacements: unknown },
+      ];
+      expect(sql).toContain('FROM import_jobs j');
+      expect(sql).toContain('JOIN seller_accounts a');
+      expect(sql).toContain('JOIN workspace_members m');
+      expect(sql).toContain('CAST(:importId AS UNSIGNED)');
+      expect(options.replacements).toEqual({ userId: 1, importId: '42' });
+    });
+
+    it('404 when missing or not a member; 403 for a too-low role', async () => {
+      query.mockResolvedValueOnce([]);
+      await expect(service.requireImportJob(1, '42', 'member')).rejects.toEqual(
+        new NotFoundException(IMPORT_NOT_FOUND_MESSAGE),
+      );
+      query.mockResolvedValueOnce([
+        {
+          id: 42,
+          workspaceId: 7,
+          sellerAccountId: 9,
+          accountStatus: 'active',
+          role: 'member',
+        },
+      ]);
+      await expect(service.requireImportJob(1, '42', 'owner')).rejects.toEqual(
+        new ForbiddenException(INSUFFICIENT_ROLE_MESSAGE),
+      );
+    });
   });
 });

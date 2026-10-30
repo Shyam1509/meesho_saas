@@ -6,6 +6,7 @@ import { AppLoggerModule } from './common/logging/logger.module';
 import { AppConfigModule } from './config/app-config.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
+import { ImportsModule } from './imports/imports.module';
 import { SellerAccountsModule } from './seller-accounts/seller-accounts.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 
@@ -20,6 +21,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     AuthModule,
     WorkspacesModule,
     SellerAccountsModule,
+    ImportsModule,
   ],
 })
 export class AppModule {}

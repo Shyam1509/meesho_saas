@@ -90,7 +90,7 @@ export class EnvironmentVariables {
   @Transform(({ value }) => toOriginList(value))
   @ArrayNotEmpty()
   @Matches(ORIGIN_PATTERN, { each: true })
-  CORS_ORIGINS: string[] = ['http://localhost:4300'];
+  CORS_ORIGINS: string[] = ['http://localhost:4310'];
 
   @IsIn(LOG_LEVELS)
   LOG_LEVEL: LogLevel = 'info';
@@ -129,6 +129,20 @@ export class EnvironmentVariables {
   @Min(1)
   @Max(10_000)
   AUTH_RATE_LIMIT_PER_MINUTE: number = 10;
+
+  /** Largest import upload accepted, in MB (1 MB = 1,048,576 bytes); larger files get 413. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  IMPORT_MAX_FILE_MB: number = 10;
+
+  /** Most non-blank data rows one import file may contain (all sheets together); more gets 422. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200_000)
+  IMPORT_MAX_ROWS: number = 50_000;
 }
 
 const KNOWN_KEYS: ReadonlyArray<keyof EnvironmentVariables> = [
@@ -146,6 +160,8 @@ const KNOWN_KEYS: ReadonlyArray<keyof EnvironmentVariables> = [
   'SESSION_IDLE_MINUTES',
   'SESSION_ABSOLUTE_HOURS',
   'AUTH_RATE_LIMIT_PER_MINUTE',
+  'IMPORT_MAX_FILE_MB',
+  'IMPORT_MAX_ROWS',
 ];
 
 /** Test runs may only touch databases whose name ends in this suffix. */

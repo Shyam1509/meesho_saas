@@ -4,7 +4,9 @@ NestJS 11 + Sequelize v6 (MySQL 8). Milestone 1 (foundation): config validation,
 structured logging, error envelope, health check, Swagger, migration tooling.
 Milestone 2 (database and tenancy): 14 tables via migrations + Sequelize models, documented in
 [`db/SCHEMA.md`](db/SCHEMA.md). Milestone 3 (auth and authorization): server-side sessions, CSRF
-protection, rate limiting, workspaces, members and seller accounts with owner/member roles. No imports yet.
+protection, rate limiting, workspaces, members and seller accounts with owner/member roles. Milestone 4
+(import pipeline): orders CSV and settlement workbook upload → preview → confirm, with idempotency,
+transactions and order status history (see [Imports](#imports-milestone-4)).
 The repository-level README covers the whole project.
 
 ## Setup
@@ -50,6 +52,18 @@ Everything requires a session unless marked public. ids in JSON are strings; tim
 | `GET /accounts/:accountId` | member | one seller account |
 | `PATCH /accounts/:accountId` | owner | edit / disable / re-enable |
 | `DELETE /accounts/:accountId` | owner | disable (idempotent; accounts are never deleted) |
+| `GET /imports/config` | signed in | `{ maxFileMb, maxRows }` (upload limits for the client) |
+| `POST /accounts/:accountId/imports` | member | multipart upload (`file`; `dataAsOf` = YYYY-MM-DD, required for orders CSV, refused for workbooks) → 201 ImportDetail `previewed`; 400 / 404 / 409 (same file already imported, or account disabled) / 413 / 422 `PARSE_ERROR` (no job created) / 429 (20 uploads per minute per IP, or 2 parses already running) |
+| `GET /accounts/:accountId/imports?page&pageSize` | member | `{ items: ImportSummary[], page, pageSize, total }`, newest first |
+| `GET /imports/:importId` | member | ImportDetail (summary + `preview`: sheets, planned counts, first 10 rows without errors) |
+| `GET /imports/:importId/rows?status&page&pageSize` | member | staged rows in file order; `status` ∈ valid / error / skipped / imported |
+| `GET /imports/:importId/errors?page&pageSize` | member | rows with errors (`error`, or `skipped` after a confirm that skipped them) |
+| `POST /imports/:importId/confirm` `{ skipErrorRows? }` | member | 200 `completed`; 409 not previewed / no valid rows / errors not acknowledged / file already imported / account disabled; 500 system failure (job becomes `failed`) |
+| `POST /imports/:importId/retry` | member | `failed`, or `importing` for more than 15 minutes → runs again from the staged rows → 200 `completed` |
+| `POST /imports/:importId/cancel` | member | `previewed` / `failed` / stale `importing` → `cancelled`; deletes the staged rows (the job and its counts stay) |
+
+Every ImportSummary carries `allowedActions` (`confirm` / `retry` / `cancel`), computed by the server: the UI
+shows only those buttons.
 
 ## Authentication and authorization
 
@@ -117,8 +131,125 @@ Everything requires a session unless marked public. ids in JSON are strings; tim
 - `trust proxy` is not set, so the client IP is the TCP peer. Behind a reverse proxy every client would
   share the proxy's IP for both limits until this is configured (M9).
 
+## Imports (Milestone 4)
+
+> **Built on synthetic fixtures — verify with real Meesho files.** No real Meesho export was available.
+> Every header name, sheet name and alias lives in ONE versioned file,
+> [`src/imports/profiles/meesho-profiles.ts`](src/imports/profiles/meesho-profiles.ts) (`PROFILE_VERSION` 2),
+> taken from the blueprint's list of known columns. The preview shows the recognised, missing-optional and
+> ignored columns and sheets, so drift in a real file is visible before anything is imported. Add aliases
+> there (and bump the version) once real files have been checked.
+
+**Flow.** upload → detect type → parse → validate headers and values → normalise → preview (job
+`previewed`, rows staged in `import_rows`) → confirm → one transaction: orders + status events, or settlement
+entries → `completed`. The raw file is never stored (`storage_key` stays NULL); retry re-runs from the staged
+rows. Members and owners may upload, confirm, retry, cancel and view; non-members get 404.
+
+**File type** (extension AND content): `.csv` that is valid UTF-8 (BOM allowed) → orders report
+(`orders_csv`); `.xlsx` starting with the ZIP signature → settlement workbook (`settlement_xlsx`). Anything
+else → 422.
+
+**Limits (denial of service).**
+- `IMPORT_MAX_FILE_MB` (default 10; larger → 413) and `IMPORT_MAX_ROWS` non-blank data rows per file (default
+  50 000; more → 422), counted as rows arrive, so parsing stops at the cap.
+- CSV: more than `IMPORT_MAX_ROWS` + 1000 physical lines (blank ones included) → 422 before parsing; records
+  are streamed one at a time (only mapped values are kept); a record over 64 KB or with more than 200 fields
+  → 422.
+- Workbook: at most 500 ZIP entries and 60 MB uncompressed, checked on the central directory AND by actually
+  inflating every entry (16 KB steps); shared strings and styles at most 20 MB each. Sheet names are read
+  from `xl/workbook.xml` and its relationships: more than 50 sheets, two sheets on the same part (or a sheet on
+  the shared strings / styles), two sheets read as the same kind ("Order Payments" and "Order Payments."), a
+  sheet name over 64 characters or a malformed character reference → 422. Only the recognised sheets are then
+  streamed through exceljs's streaming reader, fed lazily from views of the validated entries (no copies, no
+  temporary files, nothing hidden between entries is read). More than `IMPORT_MAX_ROWS` + 1000 streamed rows,
+  or any cell beyond column 200 (even an empty one) → 422 at the first such row.
+- At most 2 uploads are parsed at once in the process (else 429 `RATE_LIMITED` "Imports are busy, try again
+  in a moment"), and 20 uploads per minute per client IP (429 with `Retry-After`).
+
+**File-level errors** → 422 `PARSE_ERROR`, `details: [{ field, reasons }]` with `field` = `file`, `columns`
+(CSV header), `sheets` or `sheets.<Sheet name>`; no job is created. Causes: wrong type, not UTF-8, empty,
+malformed CSV quoting, missing required columns, two columns matching one field, no recognised sheet, no data
+rows, too many rows / lines / columns, unsafe or unreadable workbook.
+
+**Headers.** Compared lower-case with everything but a–z/0–9 removed. A field matches an exact alias or a
+prefix alias (e.g. `supplierlistedprice…`; "Meesho Commission Percentage" is excluded from the commission
+amount). CSV: the header is the first row. Workbook: the header is the first of a sheet's first 10 non-empty
+rows that contains every required column. Unmapped columns are never stored or logged; only their names appear
+in the preview, at most 100 names of at most 100 characters per list, then an "and N more" entry.
+
+| Report | Required columns | Optional |
+| --- | --- | --- |
+| Orders CSV | Sub Order No, Reason for Credit Entry (or Order Status / Status), Order Date, Quantity (or Qty) | Order No, Catalog ID, Customer State, Product Name, SKU, Size, Supplier Listed Price…, Supplier Discounted Price…, Packet Id |
+| Order Payments → `order_payment` | Sub Order No, Transaction ID, Payment Date, Final Settlement Amount (Transaction ID and Payment Date cells may be blank) | Order Date, Total Sale Amount…, Total Sale Return Amount…, Meesho Commission…, Shipping Charge…, TCS, TDS, Recovery, Compensation |
+| Ads Cost → `ads_cost` | Total Ads Cost (or Ads Cost), Deduction Date (or Payment Date / Date) | Transaction ID (or Campaign ID) |
+| Referral Payments → `referral_payment` | Net Referral Amount (or Referral Amount / Amount), Payment Date (or Date) | Transaction ID, Sub Order No |
+| Compensation and Recovery → `compensation` / `recovery` | Amount (or Net Amount), Payment Date (or Date) | Transaction ID, Sub Order No, Type (or Category): mentioning only "recovery" / "compensation" decides, else the sign (< 0 → recovery). A Reason column is not stored. |
+
+"Disclaimer" and any other sheet are listed as ignored.
+
+**Values.** Blank rows (every mapped cell empty) are skipped and not counted; row numbers are as seen in the
+file (header counted). A blank cell is NULL (not reported), never 0. Text: Unicode format characters
+(zero-width, bidi controls, soft hyphen) removed — also from file names — then trimmed, whitespace collapsed, at
+most 64 characters for ids (SKU 128) and 255 for names. Ids that Excel turned into scientific notation
+(1.23E+17) or numbers too long to be exact are errors. Amounts: `₹` / `Rs.` / `INR` and spaces are stripped;
+thousands separators only in valid Indian (`1,23,456.78`) or Western (`123,456.78`) grouping (anything else,
+e.g. `1,23` or `12,5`, is a row error); one leading minus, at most 2 decimals (extra trailing zeros allowed),
+up to 9999999999.99; workbook numbers are accepted only when they are a 2-decimal value up to a float artefact
+(< 1e-9). Quantity: whole number > 0. Dates → YYYY-MM-DD from YYYY-MM-DD, YYYY-MM-DD HH:mm[:ss], DD-MM-YYYY,
+DD/MM/YYYY (always day first: 10/25/2026 is an error, never 25 October), DD Mon YYYY / DD-Mon-YYYY, or workbook
+date cells (their UTC date); years 2000–2100. A Sub Order No repeated in one orders file makes the later rows
+errors. Row errors are `{ field, reason }` (field key; the reason names the column); the row keeps the raw text
+of a bad cell so it can be found.
+
+**Partial-import policy.** Confirm imports all valid rows in ONE transaction. When rows have errors the request
+must say `skipErrorRows: true` (else 409); those rows are then recorded as `skipped`. Zero valid rows → 409. Any
+failure rolls everything back, the job becomes `failed` with a safe `failureMessage`, the response is 500, and
+`POST /retry` runs it again. The confirm transaction runs at READ COMMITTED and its first statement locks the
+seller account row (`FOR UPDATE`): one import per account at a time, and an import that waited for another sees
+everything the other committed. A job left `importing` by a crash can be retried or cancelled once its
+`confirmed_at` is more than 15 minutes old. Cancel deletes the job's staged rows (report data nobody will
+import); the job, its counts and its preview summary stay.
+
+**Idempotency.** Uploading a file (same sha256, account and report type) that is already `importing` /
+`completed` → 409 naming the earlier import; the generated-column unique key guards confirm as well. The same
+file for another account is a separate import. Orders are upserted by (account, Sub Order No). Settlement
+entries are inserted by fingerprint v2 = sha256 of [sheet profile key, the sheet's REQUIRED values (Order
+Payments: sub-order no, transaction id, payment date, final settlement amount; other sheets: amount and date),
+occurrence index among identical tuples in the file]. Optional columns and the entry type never enter it (on
+"Compensation and Recovery" the type comes from the optional Type column or the sign), so header drift (a
+renamed, added or dropped optional column, a 0 versus a blank) cannot create duplicates: an overlapping
+workbook adds only its new rows (repeats are `unchanged`), and two identical rows in one file (a repeated
+transaction ID) stay two entries. `transaction_id` is never unique.
+
+**Observation time.** `dataAsOf` (required for an orders CSV, refused for a workbook) is the day the report was
+downloaded from Meesho, `YYYY-MM-DD`, not after today in India; `import_jobs.data_as_of` is the END of that day
+in India (23:59:59.999 IST). Workbooks use the upload time. Each confirmed orders row records one
+`order_status_events` row observed at `data_as_of`. An order's current values move forward only when
+`data_as_of >= current_status_observed_at` (an equal time counts as forward; `update` when something changes,
+`unchanged` otherwise, the observation time still advances); an older report only adds history (row action
+`status_event`, its own count: `planned.historyOnly` / `historyOnlyCount`). A blank cell in a newer report never
+erases a value an earlier report gave. Statuses are stored raw (trimmed, case kept); normalisation is M5. Prices are stored as reported
+(per unit vs line total still unknown); `product_id`, settlement matching and `is_estimate` stay NULL / false
+(M5/M6).
+
+**Audit and logs.** `import.confirmed` (counts) and `import.cancelled` are written to `audit_logs` in the same
+transaction. Logs carry the job id, account id, counts and durations: never row values or file names.
+
+**Limitations.**
+- A crashed import stays `importing` until someone retries or cancels it after 15 minutes (no automatic
+  sweeper). Each confirm/retry writes its own `confirmed_at` as a claim token and may complete (or fail) the
+  job only while it still holds it, so a run that is taken over by a stale retry or cancel rolls back.
+- The concurrency limit, the upload throttle and the stale-import window are per process (in memory).
+- Fingerprint v2 cannot tell apart two rows whose required values are identical except for their order in
+  the file: the occurrence index does, so an overlapping file must list such rows in the same order.
+- Worksheets must sit in `xl/workbook.xml` / `xl/_rels/workbook.xml.rels` (where every spreadsheet writer puts
+  them). Shared strings are cached in memory (bounded by the 60 MB check).
+- Settlement entries imported with fingerprint v1 (before this change, test data only) are not matched by v2.
+- The preview's planned counts are computed at upload time; confirm recomputes them.
+
 Errors always use `{ "error": { "code", "message", "requestId", "details"? } }`; codes and
-their HTTP status live in `src/common/errors/error-codes.ts`. Every response carries an
+their HTTP status live in `src/common/errors/error-codes.ts` (an `ApiException` carries an explicit code,
+e.g. `PARSE_ERROR` 422). Every response carries an
 `x-request-id` header (a valid incoming one is reused).
 
 ## Conventions

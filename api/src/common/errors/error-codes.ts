@@ -2,8 +2,8 @@ import { HttpStatus } from '@nestjs/common';
 
 /**
  * Single source of truth for API error codes and their HTTP status.
- * Modules throw Nest HttpExceptions and the global filter maps their status here. A typed
- * ApiException (explicit code) and a PARSE_ERROR code arrive with the import pipeline in M4.
+ * Modules throw Nest HttpExceptions and the global filter maps their status here, or an ApiException
+ * (api.exception.ts) when the code is not implied by the status (e.g. PARSE_ERROR).
  */
 export const ERROR_CODE_STATUS = {
   VALIDATION_ERROR: HttpStatus.BAD_REQUEST,
@@ -12,8 +12,10 @@ export const ERROR_CODE_STATUS = {
   NOT_FOUND: HttpStatus.NOT_FOUND,
   CONFLICT: HttpStatus.CONFLICT,
   PAYLOAD_TOO_LARGE: HttpStatus.PAYLOAD_TOO_LARGE,
+  /** An uploaded file the importer cannot read or accept (wrong type, encoding, headers, limits). */
+  PARSE_ERROR: HttpStatus.UNPROCESSABLE_ENTITY,
   RATE_LIMITED: HttpStatus.TOO_MANY_REQUESTS,
-  /** Any other 4xx not listed above (e.g. 405, 406, 415). */
+  /** Any other 4xx not listed above (e.g. 405, 406, 415, a plain 422). */
   BAD_REQUEST: HttpStatus.BAD_REQUEST,
   INTERNAL_ERROR: HttpStatus.INTERNAL_SERVER_ERROR,
 } as const satisfies Record<string, HttpStatus>;

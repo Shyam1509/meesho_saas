@@ -58,4 +58,8 @@ export {
   WorkspaceMember,
 };
 export * from './enums';
+export type {
+  ImportPreviewSummary,
+  ImportSheetSummary,
+} from './import-job.model';
 export type { ImportRowError } from './import-row.model';

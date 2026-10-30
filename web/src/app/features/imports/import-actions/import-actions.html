@@ -1,0 +1,123 @@
+@let item = job();
+
+@if (item.status === 'importing') {
+  <p
+    class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+    data-testid="importing-note"
+  >
+    @if (hasActions()) {
+      This import started a long time ago and seems to have stopped. Nothing is imported until it
+      finishes: retry it, or discard it.
+    } @else {
+      This import is still running. Reload the page in a moment to see the result.
+    }
+  </p>
+}
+@if (hasActions()) {
+  <div
+    class="rounded-lg border border-slate-200 bg-white p-4"
+    [attr.aria-busy]="pending() !== null"
+    data-testid="import-actions"
+  >
+    @if (canConfirm()) {
+      @if (noValidRows()) {
+        <p class="text-sm text-slate-800" data-testid="no-valid-rows">
+          This file has no valid rows, so there is nothing to import. Discard it, fix the file and
+          upload it again.
+        </p>
+      } @else if (errorRows() > 0) {
+        <div class="flex items-start gap-2">
+          <input
+            #skipCheckbox
+            type="checkbox"
+            [id]="idPrefix + '-skip'"
+            class="mt-0.5 size-4 rounded border-slate-400 text-accent-700"
+            required
+            [checked]="skipErrors()"
+            [attr.aria-invalid]="skipRequired() ? 'true' : null"
+            [attr.aria-describedby]="
+              skipRequired() ? idPrefix + '-skip-hint ' + idPrefix + '-skip-error' : idPrefix + '-skip-hint'
+            "
+            (change)="toggleSkip($event)"
+          />
+          <div>
+            <label [for]="idPrefix + '-skip'" class="text-sm font-medium text-slate-900">
+              {{ skipLabel() }}
+            </label>
+            <p [id]="idPrefix + '-skip-hint'" class="text-sm text-slate-600">{{ skipHint() }}</p>
+            @if (skipRequired()) {
+              <p [id]="idPrefix + '-skip-error'" class="mt-1 text-sm text-red-700">
+                {{ skipErrorText() }}
+              </p>
+            }
+          </div>
+        </div>
+      } @else {
+        <p class="text-sm text-slate-700">
+          All rows are valid. Confirm to import them, or discard the file.
+        </p>
+      }
+    }
+
+    @if (actionError(); as failure) {
+      <app-validation-summary
+        class="mt-4"
+        [heading]="failure.heading"
+        [message]="failure.error.message"
+        [details]="failure.error.details"
+        [labelFor]="fieldLabel"
+      />
+    }
+
+    <div class="mt-4 flex flex-wrap gap-3">
+      @if (canConfirm() && !noValidRows()) {
+        <button
+          type="button"
+          class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          [attr.aria-disabled]="pending() !== null ? 'true' : null"
+          (click)="confirm()"
+        >
+          {{ pending() === 'confirm' ? 'Importing…' : 'Confirm import' }}
+        </button>
+      }
+      @if (canRetry()) {
+        <button
+          type="button"
+          class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          [attr.aria-disabled]="pending() !== null ? 'true' : null"
+          (click)="retry()"
+        >
+          {{ pending() === 'retry' ? 'Retrying…' : 'Retry import' }}
+        </button>
+      }
+      @if (canDiscard()) {
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          [attr.aria-disabled]="pending() !== null ? 'true' : null"
+          (click)="askToDiscard()"
+        >
+          Discard
+        </button>
+      }
+    </div>
+  </div>
+}
+
+@if (askingDiscard()) {
+  <app-confirm-dialog
+    heading="Discard this import?"
+    [message]="
+      'Nothing from ' +
+      item.originalFilename +
+      ' is imported, and the rows read from it are deleted. The import stays in the history as Cancelled.'
+    "
+    confirmLabel="Discard import"
+    pendingLabel="Discarding…"
+    tone="danger"
+    [pending]="pending() === 'cancel'"
+    [error]="discardError()"
+    (confirmed)="discard()"
+    (cancelled)="closeDiscard()"
+  />
+}

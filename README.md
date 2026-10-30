@@ -17,7 +17,7 @@ and profit are never mixed up.
 | 1 | Foundation: NestJS + Angular structure, env validation, logging, health endpoint, Swagger, MySQL connection, migration tooling | Done |
 | 2 | Database and tenancy: identity/workspace/account/import tables, domain tables | Done (14 tables, see [`api/db/SCHEMA.md`](api/db/SCHEMA.md)) |
 | 3 | Auth and workspace authorization (owner/member), cross-tenant denial tests | Done (sign-in, workspaces, seller accounts; see `api/README.md`) |
-| 4 | Import pipeline: CSV orders, XLSX settlements, preview, validation, idempotency, status history | Not started |
+| 4 | Import pipeline: CSV orders, XLSX settlements, preview, validation, idempotency, status history | Done (built on synthetic files; verify with real Meesho exports) |
 | 5 | Orders, settlements, reconciliation | Not started |
 | 6 | Products, effective-dated costs, expenses | Not started |
 | 7 | Dashboard, account comparison, CSV reports | Not started |
@@ -31,10 +31,15 @@ What works today:
   picks the current one. Workspace settings shows the name (owners can rename it) and a read-only member list.
 - **Seller accounts**: list the workspace's Meesho accounts; owners add, edit, disable and re-enable them. Changes
   are recorded in the audit log.
+- **Imports**: upload a Meesho orders report (`.csv`) or settlement workbook (`.xlsx`) for a seller account, check
+  the preview (counts, recognised and ignored columns, sample rows, row-level errors), then confirm or discard it.
+  Orders are upserted by sub-order number with a status history; settlement rows are stored once each. History of
+  every upload per account, with an import detail page.
 - `GET /api/v1/health` (API + database check), Swagger UI, and an Overview panel with live API/database status.
 
-Orders, settlements, products, expenses, imports and reports are still placeholders that name their milestone. The
-database schema for all of them exists, with tenant isolation enforced by composite foreign keys.
+Orders, settlements, products, expenses and reports screens are still placeholders that name their milestone; the
+imported data is in the database but not shown yet (Milestone 5). The database schema for all of them exists, with
+tenant isolation enforced by composite foreign keys.
 
 ## Architecture
 
@@ -42,12 +47,12 @@ database schema for all of them exists, with tenant isolation enforced by compos
 meesho_saas/
   api/       NestJS 11 REST API under /api/v1 (TypeScript)
     src/       config/ (env validation), common/ (errors, logging, http), database/ (+ models/), health/,
-               auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/
+               auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/, imports/
     db/        sequelize-cli: config.js, migrations/, seeders/ (CommonJS: the CLI cannot run TS), SCHEMA.md
     test/      e2e tests (supertest) and db/ schema tests, both against the real test database
   web/       Angular 21 standalone app + Tailwind CSS 4
     src/app/   core/ (API client, auth state + guards, workspaces, seller accounts, health, title), layout/shell,
-               features/ (auth, overview, seller-accounts, settings), shared/
+               features/ (auth, overview, seller-accounts, settings, imports), shared/
   scripts/   dev-mysql.ps1, an optional local MySQL helper for Windows
 ```
 
@@ -111,10 +116,10 @@ Cross-cutting pieces already in place in `api/`:
 4. **Install** (in `api/` and in `web/`): `npm ci`.
    If the drive holding npm's cache is full, point it elsewhere first, e.g. `set npm_config_cache=D:\npm-cache`.
 5. **Create the tables**: `npm run db:migrate` (development) in `api/`; the test scripts migrate the test database
-   themselves. `npm run db:migrate:status` should list 15 migrations as `up`.
-6. **Run**: `npm run start:dev` in `api/` (http://localhost:3100) and `npm start` in `web/` (http://localhost:4300,
+   themselves. `npm run db:migrate:status` should list 17 migrations as `up`.
+6. **Run**: `npm run start:dev` in `api/` (http://localhost:3100) and `npm start` in `web/` (http://localhost:4310,
    which proxies `/api` to the API).
-7. **First user**: set `AUTH_REGISTRATION_ENABLED=true` in `api/.env`, open http://localhost:4300, choose
+7. **First user**: set `AUTH_REGISTRATION_ENABLED=true` in `api/.env`, open http://localhost:4310, choose
    "Create an account". This creates your user, a workspace you own, and signs you in. Keep registration off
    anywhere other people can reach the API.
 
@@ -129,13 +134,15 @@ Cross-cutting pieces already in place in `api/`:
 | `DB_NAME` | yes | none | Database name |
 | `DB_USER` | yes | none | Application user (least privilege, not root) |
 | `DB_PASSWORD` | yes | none | Must not be empty |
-| `CORS_ORIGINS` | no | `http://localhost:4300` | Comma-separated allowed browser origins |
+| `CORS_ORIGINS` | no | `http://localhost:4310` | Comma-separated allowed browser origins (must include the web app's origin) |
 | `LOG_LEVEL` | no | `info` | `fatal`…`trace` or `silent`; always silent under `NODE_ENV=test` |
 | `AUTH_REGISTRATION_ENABLED` | no | `false` | Allow `POST /auth/register` (self sign-up) |
 | `COOKIE_SECURE` | no | `true` in production, else `false` | Secure session cookie (`__Host-` name); `false` is refused in production |
 | `SESSION_IDLE_MINUTES` | no | `720` | Sign out after this much inactivity |
 | `SESSION_ABSOLUTE_HOURS` | no | `168` | Sign out this long after sign-in, regardless of activity |
 | `AUTH_RATE_LIMIT_PER_MINUTE` | no | `10` | Sign-in and sign-up requests per minute per client IP |
+| `IMPORT_MAX_FILE_MB` | no | `10` | Largest import file in MB (1 to 50) |
+| `IMPORT_MAX_ROWS` | no | `50000` | Most data rows in one import file, all sheets together |
 
 `api/.env.example` holds placeholders only. Never commit `.env` files, credentials or production data.
 
@@ -151,7 +158,7 @@ Run from `api/`. Plain scripts use `.env` (or real environment variables when `N
 | `npm run db:migrate:undo` | Roll back the last migration (dev DB) |
 | `npm run db:migrate:undo:all` / `npm run db:test:migrate:undo:all` | Roll back every migration (refused when `NODE_ENV=production`) |
 
-There are 15 migrations, one table each (`api/db/migrations`). Every one has a tested `down`: `npm run test:db`
+There are 17 migrations (`api/db/migrations`): 15 create one table each, 2 add import columns. Every one has a tested `down`: `npm run test:db`
 migrates an empty test database, rolls everything back and migrates again. Table design, keys, delete rules and the
 idempotency rules for orders, status history and settlements are documented in
 [`api/db/SCHEMA.md`](api/db/SCHEMA.md); conventions for new migrations are in `api/README.md`.
@@ -171,7 +178,7 @@ not end in `_test`.
 | `api/` | `npm test` | Unit tests (no database) |
 | `api/` | `npm run test:e2e` | Migrates the test database, then e2e tests against `meesho_test` |
 | `api/` | `npm run test:db` | Schema tests against `meesho_test`: clean migrate + full rollback, constraints, tenancy, model drift |
-| `web/` | `npm start` | Dev server on http://localhost:4300 |
+| `web/` | `npm start` | Dev server on http://localhost:4310 |
 | `web/` | `npx ng lint` | angular-eslint (TS, templates, template accessibility) |
 | `web/` | `npx tsc --noEmit -p tsconfig.app.json` | Type-check |
 | `web/` | `npx ng test --watch=false` | Unit tests (Vitest + jsdom, no browser needed) |
@@ -182,24 +189,42 @@ not end in `_test`.
 With the API running: Swagger UI at http://localhost:3100/api/docs, OpenAPI JSON at
 http://localhost:3100/api/docs-json. All endpoints are under `/api/v1`.
 
-## Import workflow (planned, Milestone 4)
+## Import workflow (Milestone 4)
 
-Upload → detect report type → parse → validate headers and types → normalize → preview with insert/update/error
-counts and row-level errors (row, field, reason) → user confirms → transactional import/upsert plus order status
-events → reconciliation refresh → summary. Re-importing the same file is idempotent (file checksum); repeated
-order IDs add status observations instead of duplicate orders; settlement transaction IDs are not treated as
-unique.
+Upload → detect the report type (`.csv` orders, `.xlsx` settlement workbook, checked by content too) → safety limits
+(file size, rows, columns, workbook size and structure) → find the header row and map columns by name → normalise
+dates, amounts and text → preview with row-level errors (row, sheet, field, reason) → the user confirms → one
+transaction writes orders, status events and settlement entries → summary. Nothing is written before confirm.
+
+- **Orders CSV** needs "Sub Order No", "Order Date", "Quantity" and a status column ("Reason for Credit Entry",
+  "Order Status" or "Status"), plus the **"Statuses as of"** date (the day you downloaded the report). An order's
+  current values only move forward: a report older than what is saved adds history but changes nothing.
+- **Settlement workbook**: sheets "Order Payments", "Ads Cost", "Referral Payments" and "Compensation and Recovery"
+  are read; "Disclaimer" and other sheets are listed as ignored. Each row becomes one entry identified by a
+  fingerprint of its required columns, so re-importing an overlapping workbook adds nothing; repeated transaction
+  IDs stay separate entries.
+- **Same file twice** for an account is refused. Rows with errors are imported only if you tick "skip rows with
+  errors"; a database failure rolls everything back and the import can be retried.
+- Amounts are stored exactly as reported (`₹`, Indian or Western thousands separators); a blank amount stays
+  "missing", never 0. Dates: `DD-MM-YYYY`, `DD/MM/YYYY`, `YYYY-MM-DD`, `DD Mon YYYY` or Excel dates.
+- The raw file is not stored; only the recognised columns of each row are kept. Header names and limits are in
+  `api/README.md`.
 
 ## Limitations (current)
 
-- No import and no financial data yet (Milestones 4 to 7).
+- Imported orders and settlements are not shown or totalled yet (Milestones 5 to 7); orders are not linked to
+  products (Milestone 6) and settlements are not matched to orders (Milestone 5).
 - Member management (invite, change role, remove), password change and reset, signing out other sessions and email
   verification are not built yet. Registration reveals whether an email is already registered (409); it is off by
   default and rate-limited for that reason.
 - Sign-in rate limits are kept in memory, so they only work with a single API instance, and the API does not yet
   trust a reverse proxy's client IP (Milestone 9). Only plain ASCII email addresses are accepted.
-- No real Meesho report samples have been tested yet; the import parser will first be built on synthetic fixtures.
-  Whether reported prices are per unit or per line is decided in Milestone 4 from real files.
+- **No real Meesho report has been imported yet.** The column names come from the blueprint and synthetic test files;
+  real exports may need extra header aliases (one profile file, `api/src/imports/profiles/meesho-profiles.ts`). The
+  preview lists recognised, missing and ignored columns so a mismatch is visible before confirming. Prices are
+  stored as reported; whether they are per unit or per line is still to be confirmed from real files.
+- An import interrupted by a crash stays "importing" until it can be retried or discarded after 15 minutes.
+  Upload limits (2 parses at a time, 20 uploads per minute per IP) are kept in memory, per API instance.
 - Some rules MySQL cannot enforce are left to application code: a settlement entry must not supersede itself
   (MySQL forbids CHECKs on AUTO_INCREMENT columns), and status history should advance only by report date.
 - One application user can run migrations and modify every table; a separate runtime user without DDL (and without

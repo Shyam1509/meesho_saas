@@ -1,8 +1,10 @@
-# Database schema (Milestones 2 and 3)
+# Database schema (Milestones 2–4)
 
 MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrations in
 `db/migrations` (one table per migration: `20261030000001` … `20261030000014` in Milestone 2,
-`20261030000015-create-user-sessions` in Milestone 3); the app never syncs.
+`20261030000015-create-user-sessions` in Milestone 3; then column changes:
+`20261030000016-add-import-jobs-data-as-of-and-preview` and `20261030000017-add-import-jobs-history-only-count`
+in Milestone 4); the app never syncs.
 `test/db/*.db-spec.ts` asserts everything below against a freshly migrated `meesho_test`.
 
 ## Conventions
@@ -73,8 +75,8 @@ Workspace-only rows of `expenses` and `audit_logs` are still checked by their si
 | `workspaces` | Tenant | — | `created_by_user_id` → users |
 | `workspace_members` | User ↔ workspace, `role` owner/member | `(workspace_id, user_id)` | workspace **CASCADE**, user **CASCADE** |
 | `seller_accounts` | One Meesho seller account; `meesho_supplier_id` is a report identifier, not a credential | `(workspace_id, display_name)`, `(workspace_id, meesho_supplier_id)`, `(workspace_id, id)` | workspace |
-| `import_jobs` | One uploaded file: type, lifecycle status, size, sha256, optional report period, counts, failure | `(seller_account_id, id)`; `(seller_account_id, report_type, active_file_sha256)`; `(seller_account_id, file_sha256)` is a plain index | account (composite), created_by / confirmed_by → users |
-| `import_rows` | Every source row: sheet, row number as the user sees it, status, action, `errors` JSON `[{field, reason}]`, normalized `source_values` JSON, `row_hash` | `(import_job_id, sheet_name, source_row_number)`, `(import_job_id, id)` | import job **CASCADE** |
+| `import_jobs` | One uploaded file: type, lifecycle status, size, sha256, optional report period, counts, failure; `data_as_of` (M4: when the report's statuses were current), `preview_summary` JSON (M4: sheets, column names — at most 100 per list — and planned counts; never row values) and `history_only_count` (M4: older-report rows recorded as status history only). The raw file is not stored (`storage_key` stays NULL) | `(seller_account_id, id)`; `(seller_account_id, report_type, active_file_sha256)`; `(seller_account_id, file_sha256)` is a plain index | account (composite), created_by / confirmed_by → users |
+| `import_rows` | Every non-blank source row: sheet, row number as the user sees it, status, action, `errors` JSON `[{field, reason}]`, normalized `source_values` JSON (mapped columns only), `row_hash` (settlement rows: entry fingerprint; order rows: sha256 of the normalized values). Cancelling an import deletes its rows (the job stays) | `(import_job_id, sheet_name, source_row_number)`, `(import_job_id, id)` | import job **CASCADE** |
 | `products` | SKU per account, `status` active/archived | `(seller_account_id, sku)`, `(seller_account_id, id)` | account (composite) |
 | `product_cost_history` | Effective-dated unit cost (`DECIMAL(12,4)`, `>= 0`, INR) | `(product_id, effective_from)` | product, created_by → users |
 | `orders` | Canonical order line = Meesho sub-order; raw `current_status` + observed time; first/last import job and the source row of the current values | `(seller_account_id, sub_order_no)`, `(seller_account_id, id)` | account, product, first/last import job, last import row (all composite) |
@@ -130,18 +132,25 @@ self-references and cycles.
   updates the existing order instead of inserting a duplicate.
 - **Status events**: `UNIQUE (order_id, import_job_id)`: one observation per order per import. Re-running
   the same import adds nothing; a later overlapping import adds a new observation (history preserved).
-- **Observation time (M4)**: `observed_at` is derived from the report period / generation date
-  (`import_jobs.report_period_end` when known), falling back to the import time.
-  `orders.current_status`, `current_status_observed_at`, `last_import_job_id` and `last_import_row_id`
-  move forward only when the new observation is not older than the current one, so importing an older
-  report never overwrites a newer status (its observation is still recorded).
-- **Settlement entries**: `UNIQUE (seller_account_id, entry_fingerprint)`. The fingerprint is a sha256
-  over a FIXED, versioned list of normalized fields — `sheet_name`, `entry_type`, `transaction_id`,
-  `sub_order_no`, `order_date`, `payment_date` and the amount columns — plus the occurrence index among
-  identical rows in the same file. `fingerprint_version` (no default; set by the importer) records which
-  list was used. It is never computed over "all columns", so header drift (new or renamed extra columns)
-  does not create duplicates. Re-importing the same file or an overlapping report is a no-op; two genuinely
-  separate rows with the same `transaction_id` stay separate (`transaction_id` is never unique).
+- **Observation time (M4)**: `observed_at` = `import_jobs.data_as_of`. For an orders CSV that is the end
+  (23:59:59.999 India time) of the day the user says the report was downloaded (required at upload); for a
+  workbook, the upload time. `orders.current_status`, `current_status_observed_at`, `last_import_job_id` and
+  `last_import_row_id` (and the other order values) move forward only when
+  `data_as_of >= current_status_observed_at` (an equal time counts as forward), so importing an older report
+  never overwrites a newer status: its observation is still recorded and counted in
+  `import_jobs.history_only_count`. A blank cell in a newer report never erases a value an earlier report gave.
+- **Settlement entries**: `UNIQUE (seller_account_id, entry_fingerprint)`. Fingerprint version 2 (what the
+  importer writes since the M4 review) is a sha256 over the sheet's profile key (not its raw name) and the
+  values of that sheet's REQUIRED columns only — Order Payments: `sub_order_no`, `transaction_id`,
+  `payment_date`, `settlement_amount` (transaction id and payment date may be blank); the other sheets: their
+  amount and date — plus the occurrence index among identical tuples in the same file. `entry_type` is not
+  hashed: the sheet key fixes it, except on "Compensation and Recovery" where it comes from the optional Type
+  column or the sign. Optional columns (sale, commission, TCS, order date, Type, …) never enter it, so adding, dropping or
+  renaming one, or a 0 versus a blank in one, cannot create duplicates. `fingerprint_version` (no default;
+  set by the importer) records which definition was used. Re-importing the same file or an overlapping
+  report is a no-op; two genuinely separate rows with the same `transaction_id` stay separate
+  (`transaction_id` is never unique). Confirms of one account are serialised (account row `FOR UPDATE`,
+  READ COMMITTED), so two overlapping imports never both insert the same fingerprint.
 - **Supersession**: `superseded_by_entry_id` marks an entry replaced by a later entry of the same account
   (e.g. an estimate replaced by the final figure). Totals sum only rows where
   `superseded_by_entry_id IS NULL`. The supersession logic itself is Milestone 5.
@@ -225,6 +234,9 @@ erDiagram
     char active_file_sha256 "generated, UK per account+type"
     date report_period_start "nullable"
     date report_period_end "nullable"
+    datetime data_as_of "nullable (M4)"
+    json preview_summary "nullable (M4)"
+    int history_only_count "nullable (M4)"
   }
   import_rows {
     bigint id PK

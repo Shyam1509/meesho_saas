@@ -22,7 +22,7 @@ import {
   select,
 } from './db-helpers';
 
-/** Schema contract (Milestones 2 and 3), asserted from information_schema of the migrated meesho_test. */
+/** Schema contract (Milestones 2–4), asserted from information_schema of the migrated meesho_test. */
 
 interface ColumnRow {
   tbl: string;
@@ -441,6 +441,40 @@ describe('schema contract (information_schema of meesho_test)', () => {
     );
     expect(generated.extra).toBe('STORED GENERATED');
     expect(generated.expr).toMatch(/importing.*completed.*file_sha256/);
+  });
+
+  it('import_jobs (M4): data_as_of DATETIME(3) NULL, preview_summary JSON NULL, history_only_count INT UNSIGNED NULL, no defaults', () => {
+    const asOf = column('import_jobs', 'data_as_of');
+    const preview = column('import_jobs', 'preview_summary');
+    const historyOnly = column('import_jobs', 'history_only_count');
+    expect([asOf.columnType, asOf.nullable, asOf.def]).toEqual([
+      'datetime(3)',
+      'YES',
+      null,
+    ]);
+    expect([
+      historyOnly.columnType,
+      historyOnly.nullable,
+      historyOnly.def,
+    ]).toEqual(['int unsigned', 'YES', null]);
+    expect([preview.columnType, preview.nullable, preview.def]).toEqual([
+      'json',
+      'YES',
+      null,
+    ]);
+    // JSON columns: the audit payloads, the row-level traceability ones and this preview summary.
+    expect(
+      columns
+        .filter((c) => c.columnType === 'json')
+        .map(key)
+        .sort(),
+    ).toEqual([
+      'audit_logs.after_data',
+      'audit_logs.before_data',
+      'import_jobs.preview_summary',
+      'import_rows.errors',
+      'import_rows.source_values',
+    ]);
   });
 
   it('settlement_entries.fingerprint_version is SMALLINT UNSIGNED NOT NULL without a default', () => {

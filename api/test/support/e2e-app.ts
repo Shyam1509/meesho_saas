@@ -19,6 +19,8 @@ export const TEST_CLIENT_IP_HEADER = 'x-test-client-ip';
 export interface ConfigOverrides {
   authRegistrationEnabled?: boolean;
   authRateLimitPerMinute?: number;
+  importMaxFileMb?: number;
+  importMaxRows?: number;
 }
 
 export interface E2eApp {
@@ -92,7 +94,8 @@ export function newRunId(): string {
 
 /**
  * Deletes everything created by users whose email ends in `-<runId>@example.test`, children first
- * (audit_logs and seller_accounts are RESTRICT; memberships and sessions cascade).
+ * (imported data, import jobs, audit_logs and seller_accounts are RESTRICT; import rows, memberships and
+ * sessions cascade).
  */
 export async function deleteRunData(
   sequelize: Sequelize,
@@ -111,6 +114,15 @@ export async function deleteRunData(
      WHERE actor_user_id IN (SELECT id FROM users WHERE email LIKE :pattern)
         OR workspace_id IN (${runWorkspaces})`,
   );
+  // Imported data of the run's accounts: entries and events → orders → jobs (their rows cascade).
+  for (const table of [
+    'settlement_entries',
+    'order_status_events',
+    'orders',
+    'import_jobs',
+  ]) {
+    await run(`DELETE FROM ${table} WHERE workspace_id IN (${runWorkspaces})`);
+  }
   await run(
     `DELETE FROM seller_accounts WHERE workspace_id IN (${runWorkspaces})`,
   );

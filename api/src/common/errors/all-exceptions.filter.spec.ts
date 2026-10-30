@@ -20,6 +20,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AllExceptionsFilter, toErrorEnvelope } from './all-exceptions.filter';
+import { ApiException } from './api.exception';
 import { GENERIC_SERVER_ERROR_MESSAGE } from './error-codes';
 import { FieldConflictException } from './field-conflict.exception';
 import { validationExceptionFactory } from './request-validation.exception';
@@ -149,6 +150,64 @@ describe('toErrorEnvelope', () => {
       REQUEST_ID,
     );
     expect(body.error).not.toHaveProperty('details');
+  });
+
+  it('maps an ApiException PARSE_ERROR to 422 with its code and details', () => {
+    const { status, body } = toErrorEnvelope(
+      new ApiException('PARSE_ERROR', 'The file cannot be imported.', [
+        { field: 'columns', reasons: ['Missing required column "Quantity"'] },
+      ]),
+      REQUEST_ID,
+    );
+
+    expect(status).toBe(422);
+    expect(body).toEqual({
+      error: {
+        code: 'PARSE_ERROR',
+        message: 'The file cannot be imported.',
+        requestId: REQUEST_ID,
+        details: [
+          { field: 'columns', reasons: ['Missing required column "Quantity"'] },
+        ],
+      },
+    });
+  });
+
+  it('an ApiException keeps its own code even when another code shares the status, and omits empty details', () => {
+    const { status, body } = toErrorEnvelope(
+      new ApiException('BAD_REQUEST', 'Nope'),
+      REQUEST_ID,
+    );
+    // 400 alone would map to VALIDATION_ERROR.
+    expect(status).toBe(400);
+    expect(body.error.code).toBe('BAD_REQUEST');
+    expect(body.error).not.toHaveProperty('details');
+  });
+
+  it('a 5xx ApiException still returns the generic INTERNAL_ERROR body without details', () => {
+    const { status, body } = toErrorEnvelope(
+      new ApiException('INTERNAL_ERROR', 'db pool exhausted', [
+        { field: 'x', reasons: ['internal detail'] },
+      ]),
+      REQUEST_ID,
+    );
+    expect(status).toBe(500);
+    expect(body).toEqual({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: GENERIC_SERVER_ERROR_MESSAGE,
+        requestId: REQUEST_ID,
+      },
+    });
+  });
+
+  it('a plain 422 HttpException (not an ApiException) maps to BAD_REQUEST', () => {
+    const { status, body } = toErrorEnvelope(
+      new HttpException('x', HttpStatus.UNPROCESSABLE_ENTITY),
+      REQUEST_ID,
+    );
+    expect(status).toBe(422);
+    expect(body.error.code).toBe('BAD_REQUEST');
   });
 
   it('maps an unknown Error to a generic 500 INTERNAL_ERROR without stack or message', () => {

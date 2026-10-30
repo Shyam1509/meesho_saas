@@ -47,6 +47,30 @@ export const DOMAIN_TABLES = [
 ] as const;
 
 /**
+ * Every migration file, in order: one create-<table> per DOMAIN_TABLES entry (Milestones 2 and 3), then
+ * the column changes of later milestones.
+ */
+export const MIGRATIONS = [
+  '20261030000001-create-users.js',
+  '20261030000002-create-workspaces.js',
+  '20261030000003-create-workspace-members.js',
+  '20261030000004-create-seller-accounts.js',
+  '20261030000005-create-import-jobs.js',
+  '20261030000006-create-import-rows.js',
+  '20261030000007-create-products.js',
+  '20261030000008-create-product-cost-history.js',
+  '20261030000009-create-orders.js',
+  '20261030000010-create-order-status-events.js',
+  '20261030000011-create-settlement-entries.js',
+  '20261030000012-create-expenses.js',
+  '20261030000013-create-reconciliation-runs.js',
+  '20261030000014-create-audit-logs.js',
+  '20261030000015-create-user-sessions.js',
+  '20261030000016-add-import-jobs-data-as-of-and-preview.js',
+  '20261030000017-add-import-jobs-history-only-count.js',
+] as const;
+
+/**
  * MySQL error numbers asserted by the behaviour specs.
  * Foreign-key errors: MySQL names the constraint (1451/1452) only to users with table-level privileges
  * on the parent tables; the least-privilege app user (database-level grants) gets the generic 1216/1217

@@ -2,7 +2,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router, TitleStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
 
-import { ME_OWNER } from '../testing/test-data';
+import { ME_OWNER, importDetail } from '../testing/test-data';
 import { App } from './app';
 import { routes } from './app.routes';
 import { provideApiHttpClient } from './core/api/provide-api-http-client';
@@ -70,5 +70,36 @@ describe('App', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe(heading);
     expect(document.title).toBe(`${heading} · Meesho Seller SaaS`);
+  });
+
+  it('/imports shows the "Imports" page inside the shell', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/imports');
+    await fixture.whenStable();
+    httpTesting.expectOne('/api/v1/imports/config').flush({ maxFileMb: 10, maxRows: 50000 });
+    httpTesting.expectOne('/api/v1/workspaces/10/accounts').flush({ items: [] });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Imports');
+    expect(document.title).toBe('Imports · Meesho Seller SaaS');
+  });
+
+  it('/imports/:importId shows that import inside the shell, titled "Import details"', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/imports/500');
+    await fixture.whenStable();
+    expect(document.title).toBe('Import details · Meesho Seller SaaS');
+
+    httpTesting.expectOne('/api/v1/imports/500').flush(importDetail({ errorRows: 0 }));
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('orders-oct.csv');
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe('Imports');
   });
 });

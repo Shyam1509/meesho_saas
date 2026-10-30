@@ -15,8 +15,8 @@ import { SellerAccount } from './seller-account.model';
 
 /**
  * Append-only status observation; one per order per import job. Account-scoped: order, import job and
- * source row all belong to the same account (composite FKs). observedAt comes from the report
- * period/generation date when known, else the import time (M4).
+ * source row all belong to the same account (composite FKs). observedAt is the import job's data_as_of
+ * (the user's "statuses as of" time for an orders CSV, else the upload time).
  */
 @Table({
   tableName: 'order_status_events',
