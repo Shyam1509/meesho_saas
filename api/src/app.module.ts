@@ -7,7 +7,10 @@ import { AppConfigModule } from './config/app-config.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { ImportsModule } from './imports/imports.module';
+import { OrdersModule } from './orders/orders.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { SellerAccountsModule } from './seller-accounts/seller-accounts.module';
+import { SettlementsModule } from './settlements/settlements.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 
 @Module({
@@ -22,6 +25,9 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     WorkspacesModule,
     SellerAccountsModule,
     ImportsModule,
+    OrdersModule,
+    SettlementsModule,
+    ReconciliationModule,
   ],
 })
 export class AppModule {}

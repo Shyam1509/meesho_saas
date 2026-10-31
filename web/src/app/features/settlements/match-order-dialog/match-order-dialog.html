@@ -1,0 +1,149 @@
+@let current = entry();
+<app-dialog
+  heading="Match settlement entry to an order"
+  width="wide"
+  [busy]="pending()"
+  (closed)="cancel()"
+>
+  <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4" data-testid="match-entry">
+    <div>
+      <dt class="text-slate-600">Transaction ID</dt>
+      <dd class="font-medium break-all text-slate-900">{{ current.transactionId ?? missing }}</dd>
+    </div>
+    <div>
+      <dt class="text-slate-600">Sub order no. in the sheet</dt>
+      <dd class="break-all text-slate-900">{{ current.subOrderNo ?? missing }}</dd>
+    </div>
+    <div>
+      <dt class="text-slate-600">Payment date</dt>
+      <dd class="text-slate-900">{{ current.paymentDate | displayDate }}</dd>
+    </div>
+    <div>
+      <dt class="text-slate-600">Settlement amount</dt>
+      <dd class="text-slate-900 tabular-nums"><app-amount [value]="current.settlementAmount" /></dd>
+    </div>
+  </dl>
+
+  <form role="search" aria-label="Find an order" class="mt-5" (submit)="search($event)">
+    <label for="match-order-q" class="block text-sm font-medium text-slate-800">
+      Find the order
+    </label>
+    <div class="mt-1 flex flex-wrap gap-2">
+      <input
+        id="match-order-q"
+        type="search"
+        data-autofocus
+        [attr.maxlength]="maxLength"
+        aria-describedby="match-order-q-hint"
+        class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+        [value]="query()"
+        (input)="query.set(inputValue($event))"
+      />
+      <button
+        type="submit"
+        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      >
+        Search
+      </button>
+    </div>
+    <p id="match-order-q-hint" class="mt-1 text-xs text-slate-600">
+      Sub order no. or SKU (starts with), or part of the product name. Empty shows the newest
+      orders.
+    </p>
+  </form>
+
+  @let found = results();
+  <div class="mt-4" data-testid="match-results" [attr.aria-busy]="found?.kind === 'loading'">
+    @if (found === null) {
+      <p class="text-sm text-slate-600">Search to list matching orders.</p>
+    } @else if (found.kind === 'loading') {
+      <p role="status" class="text-sm text-slate-700">Searching orders…</p>
+    } @else if (found.kind === 'error') {
+      <p role="alert" class="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        The orders could not be searched: {{ found.message }}
+      </p>
+    } @else if (found.value.items.length === 0) {
+      <p role="status" class="text-sm text-slate-700">No orders found. Try another search.</p>
+    } @else {
+      <fieldset [attr.aria-describedby]="needsChoice() ? 'match-order-choice-error' : null">
+        <legend class="text-sm font-medium text-slate-800">
+          Orders ({{ found.value.items.length }} of {{ found.value.total }})
+        </legend>
+        <ul class="mt-2 max-h-64 divide-y divide-slate-200 overflow-y-auto rounded-md border border-slate-200">
+          @for (order of found.value.items; track order.id) {
+            <li class="flex items-start gap-3 px-3 py-2">
+              <input
+                type="radio"
+                name="match-order"
+                class="mt-1 size-4"
+                [id]="'match-order-' + order.id"
+                [value]="order.id"
+                [checked]="selectedOrderId() === order.id"
+                (change)="choose(order.id)"
+              />
+              <label [for]="'match-order-' + order.id" class="min-w-0 flex-1 text-sm">
+                <span class="block font-medium break-all text-slate-900">
+                  {{ order.subOrderNo }}
+                </span>
+                <span class="block text-xs text-slate-600">
+                  {{ order.orderDate | displayDate }} · {{ order.productName ?? missing }} · SKU
+                  {{ order.sku ?? missing }} · {{ order.currentStatus ?? missing }}
+                </span>
+                <span class="block text-xs text-slate-600">
+                  @if (order.settlement.entryCount === 0) {
+                    No settlement matched yet
+                  } @else {
+                    Already settled (as reported):
+                    <app-amount [value]="order.settlement.amount" /> from
+                    {{ order.settlement.entryCount }}
+                    {{ order.settlement.entryCount === 1 ? 'entry' : 'entries' }}
+                  }
+                </span>
+              </label>
+            </li>
+          }
+        </ul>
+        @if (needsChoice()) {
+          <p id="match-order-choice-error" class="mt-1 text-sm text-red-700">
+            Choose the order to match this entry to.
+          </p>
+        }
+      </fieldset>
+    }
+  </div>
+
+  @if (failure(); as failed) {
+    <div
+      role="alert"
+      class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm"
+      data-testid="match-failure"
+    >
+      <p class="font-medium text-red-800">{{ failed.heading }}</p>
+      <p class="mt-1 text-red-800">{{ failed.message }}</p>
+    </div>
+  }
+
+  <div class="mt-6 flex flex-wrap justify-end gap-3">
+    <button
+      type="button"
+      class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      (click)="cancel()"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+      [attr.aria-disabled]="pending() ? 'true' : null"
+      (click)="confirm()"
+    >
+      @if (pending()) {
+        Matching…
+      } @else if (selectedOrder(); as order) {
+        Match to {{ order.subOrderNo }}
+      } @else {
+        Match to the selected order
+      }
+    </button>
+  </div>
+</app-dialog>

@@ -60,15 +60,18 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
     ).toEqual(DOMAIN_TABLES.map((table) => table.replace(/_/g, '-')));
   }
 
-  async function importJobColumns(): Promise<string[]> {
+  async function columnsOf(table: string): Promise<string[]> {
     const rows = await select<{ col: string }>(
       sequelize,
       `SELECT COLUMN_NAME AS col FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'import_jobs'
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
        ORDER BY ORDINAL_POSITION`,
+      [table],
     );
     return rows.map((r) => r.col);
   }
+
+  const importJobColumns = () => columnsOf('import_jobs');
 
   it('undo:all -> migrate -> undo:all -> migrate', async () => {
     runSequelizeCli('db:migrate:undo:all');
@@ -90,7 +93,14 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
     await expectFullyMigrated();
   }, 180_000);
 
-  it('M4 column migrations: each undo removes exactly its columns, migrate restores them', async () => {
+  it('M4/M5 column migrations: each undo removes exactly its columns, migrate restores them', async () => {
+    const entriesBefore = await columnsOf('settlement_entries');
+    // M5: auto_match_blocked right after matched_by_user_id.
+    const matchedBy = entriesBefore.indexOf('matched_by_user_id');
+    expect(entriesBefore.slice(matchedBy, matchedBy + 2)).toEqual([
+      'matched_by_user_id',
+      'auto_match_blocked',
+    ]);
     const before = await importJobColumns();
     // data_as_of + preview_summary right after report_period_end; history_only_count after unchanged_count.
     const end = before.indexOf('report_period_end');
@@ -104,6 +114,15 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
       'unchanged_count',
       'history_only_count',
     ]);
+
+    const undo18 = runSequelizeCli('db:migrate:undo');
+    expect(undo18).toContain(
+      '20261031000018-add-settlement-entries-auto-match-blocked: reverted',
+    );
+    expect(await columnsOf('settlement_entries')).toEqual(
+      entriesBefore.filter((c) => c !== 'auto_match_blocked'),
+    );
+    expect(await importJobColumns()).toEqual(before);
 
     const undo17 = runSequelizeCli('db:migrate:undo');
     expect(undo17).toContain(
@@ -123,6 +142,7 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
 
     runSequelizeCli('db:migrate');
     expect(await importJobColumns()).toEqual(before);
+    expect(await columnsOf('settlement_entries')).toEqual(entriesBefore);
     await expectFullyMigrated();
   }, 120_000);
 });

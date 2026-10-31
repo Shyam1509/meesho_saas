@@ -6,24 +6,14 @@ import {
   Injector,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
-import {
-  Observable,
-  Subject,
-  Subscription,
-  catchError,
-  map,
-  merge,
-  of,
-  startWith,
-  switchMap,
-  tap,
-} from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subscription } from 'rxjs';
 
 import { ApiError, describeApiError, toApiError } from '../../core/api/api-error';
 import {
@@ -33,9 +23,8 @@ import {
   fieldLabel,
 } from '../../core/imports/import.models';
 import { ImportsApiService } from '../../core/imports/imports-api.service';
-import { SellerAccount } from '../../core/seller-accounts/seller-account.models';
-import { SellerAccountsApiService } from '../../core/seller-accounts/seller-accounts-api.service';
-import { WorkspaceContextService } from '../../core/workspaces/workspace-context.service';
+import { SelectedSellerAccountService } from '../../core/seller-accounts/selected-seller-account.service';
+import { SellerAccountPicker } from '../../shared/seller-account-picker/seller-account-picker';
 import { ValidationSummary } from '../../shared/validation-summary/validation-summary';
 import { ImportActions } from './import-actions/import-actions';
 import { ImportHistory } from './import-history/import-history';
@@ -47,16 +36,6 @@ import {
   ImportUploadRequest,
 } from './import-upload-form/import-upload-form';
 
-/** localStorage key prefix for the last seller account picked on this page, per workspace. */
-export const IMPORT_ACCOUNT_STORAGE_PREFIX = 'msaas.imports.accountId.';
-
-type AccountsState =
-  | { kind: 'loading' }
-  | { kind: 'no-workspace' }
-  | { kind: 'error'; message: string }
-  /** `accounts`: the active ones only, sorted by name. */
-  | { kind: 'ready'; workspaceId: string; accounts: SellerAccount[] };
-
 interface UploadFailure {
   heading: string;
   message: string;
@@ -64,14 +43,15 @@ interface UploadFailure {
 }
 
 /**
- * Imports for one seller account of the selected workspace: upload a Meesho report, check the
+ * Imports for one seller account of the selected workspace (the account shared with the other
+ * account-scoped pages, see `SelectedSellerAccountService`): upload a Meesho report, check the
  * preview (counts, planned changes, columns, sample rows, rows with errors), then confirm or
  * discard it; below, the account's import history. Members and owners can do all of it.
  */
 @Component({
   selector: 'app-imports-page',
   imports: [
-    RouterLink,
+    SellerAccountPicker,
     ImportUploadForm,
     ImportReview,
     ImportActions,
@@ -85,11 +65,9 @@ interface UploadFailure {
 })
 export class ImportsPage {
   private readonly api = inject(ImportsApiService);
-  private readonly accountsApi = inject(SellerAccountsApiService);
-  private readonly context = inject(WorkspaceContextService);
+  private readonly selection = inject(SelectedSellerAccountService);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly reloads = new Subject<void>();
   private upload$: Subscription | null = null;
 
   private readonly uploadHeading = viewChild<ElementRef<HTMLElement>>('uploadHeading');
@@ -99,14 +77,7 @@ export class ImportsPage {
   private readonly resultPanel = viewChild(ImportResult);
   private readonly history = viewChild(ImportHistory);
 
-  protected readonly isOwner = this.context.isOwner;
-  protected readonly accounts = signal<AccountsState>({ kind: 'loading' });
-  protected readonly selectedAccountId = signal<string | null>(null);
-  protected readonly selectedAccount = computed(() => {
-    const state = this.accounts();
-    const id = this.selectedAccountId();
-    return state.kind === 'ready' ? (state.accounts.find((a) => a.id === id) ?? null) : null;
-  });
+  protected readonly selectedAccount = this.selection.selected;
   /** Name of the file being uploaded, while the request is in flight. */
   protected readonly uploading = signal<string | null>(null);
   protected readonly uploadFailure = signal<UploadFailure | null>(null);
@@ -131,46 +102,20 @@ export class ImportsPage {
         error: () => undefined,
       });
 
-    merge(
-      toObservable(this.context.selectedId),
-      this.reloads.pipe(map(() => this.context.selectedId())),
-    )
-      .pipe(
-        tap(() => {
-          this.selectedAccountId.set(null);
-          this.resetInteractions();
-        }),
-        switchMap((workspaceId) => this.loadAccounts(workspaceId)),
-        takeUntilDestroyed(),
-      )
-      .subscribe((state) => {
-        this.accounts.set(state);
-        if (state.kind === 'ready') {
-          this.selectedAccountId.set(pickAccount(state.workspaceId, state.accounts));
-        }
-      });
+    // Another workspace (its accounts are reloading) or account: start clean.
+    effect(() => {
+      this.selection.selectedId();
+      untracked(() => this.resetInteractions());
+    });
   }
 
-  protected retryAccounts(): void {
-    this.reloads.next();
-  }
-
-  protected selectAccount(event: Event): void {
-    const id = (event.target as HTMLSelectElement).value;
-    const state = this.accounts();
-    if (state.kind !== 'ready' || !state.accounts.some((a) => a.id === id)) {
-      return;
-    }
-    if (id === this.selectedAccountId()) {
-      return;
-    }
+  /** The user picked another account in the picker. */
+  protected onAccountChange(): void {
     this.resetInteractions();
-    this.selectedAccountId.set(id);
-    rememberAccount(state.workspaceId, id);
   }
 
   protected upload(request: ImportUploadRequest): void {
-    const accountId = this.selectedAccountId();
+    const accountId = this.selection.selectedId();
     if (accountId === null || this.uploading() !== null) {
       return;
     }
@@ -230,29 +175,6 @@ export class ImportsPage {
     afterNextRender(() => target()?.focus(), { injector: this.injector });
   }
 
-  private loadAccounts(workspaceId: string | null): Observable<AccountsState> {
-    if (workspaceId === null) {
-      return of<AccountsState>({ kind: 'no-workspace' });
-    }
-    return this.accountsApi.list(workspaceId).pipe(
-      map(
-        (accounts): AccountsState => ({
-          kind: 'ready',
-          workspaceId,
-          accounts: accounts
-            .filter((a) => a.status === 'active')
-            .sort((a, b) =>
-              a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }),
-            ),
-        }),
-      ),
-      catchError((error: unknown) =>
-        of<AccountsState>({ kind: 'error', message: describeApiError(error) }),
-      ),
-      startWith<AccountsState>({ kind: 'loading' }),
-    );
-  }
-
   /** Another workspace or account: drop the upload in flight, the preview and the messages. */
   private resetInteractions(): void {
     this.upload$?.unsubscribe();
@@ -262,25 +184,6 @@ export class ImportsPage {
     this.current.set(null);
     this.result.set(null);
     this.notice.set('');
-  }
-}
-
-/** The remembered account when it is still active in this workspace, else the first one. */
-function pickAccount(workspaceId: string, accounts: SellerAccount[]): string | null {
-  let stored: string | null = null;
-  try {
-    stored = localStorage.getItem(IMPORT_ACCOUNT_STORAGE_PREFIX + workspaceId);
-  } catch {
-    // Storage unavailable: fall back to the first account.
-  }
-  return accounts.find((a) => a.id === stored)?.id ?? accounts[0]?.id ?? null;
-}
-
-function rememberAccount(workspaceId: string, accountId: string): void {
-  try {
-    localStorage.setItem(IMPORT_ACCOUNT_STORAGE_PREFIX + workspaceId, accountId);
-  } catch {
-    // Not remembered; the choice still applies on this page.
   }
 }
 

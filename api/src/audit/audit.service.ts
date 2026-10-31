@@ -10,11 +10,14 @@ export type AuditAction =
   | 'seller_account.disabled'
   | 'seller_account.enabled'
   | 'import.confirmed'
-  | 'import.cancelled';
+  | 'import.cancelled'
+  | 'settlement_entry.matched'
+  | 'settlement_entry.unmatched';
 
 export interface AuditEntry {
   action: AuditAction;
-  entityType: 'workspace' | 'seller_account' | 'import_job';
+  entityType:
+    'workspace' | 'seller_account' | 'import_job' | 'settlement_entry';
   entityId: number;
   workspaceId: number;
   sellerAccountId?: number | null;

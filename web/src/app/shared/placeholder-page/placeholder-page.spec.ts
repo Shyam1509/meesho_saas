@@ -28,8 +28,8 @@ describe('PlaceholderPage', () => {
   });
 
   // These screens sit inside the app shell, which needs a signed-in user. Seller accounts and
-  // Workspace settings are real pages since Milestone 3, Imports since Milestone 4 (see
-  // app.spec.ts and their own specs).
+  // Workspace settings are real pages since Milestone 3, Imports since Milestone 4, Orders and
+  // Settlements & reconciliation since Milestone 5 (see app.spec.ts and their own specs).
   describe('through the router', () => {
     beforeEach(() => {
       TestBed.configureTestingModule({
@@ -44,8 +44,6 @@ describe('PlaceholderPage', () => {
     });
 
     it.each([
-      ['/orders', 'Orders', 'Milestone 5'],
-      ['/settlements', 'Settlements & reconciliation', 'Milestone 5'],
       ['/products', 'Products & costs', 'Milestone 6'],
       ['/expenses', 'Expenses', 'Milestone 6'],
       ['/reports', 'Reports', 'Milestone 7'],

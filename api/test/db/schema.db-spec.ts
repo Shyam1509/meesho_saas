@@ -22,7 +22,7 @@ import {
   select,
 } from './db-helpers';
 
-/** Schema contract (Milestones 2–4), asserted from information_schema of the migrated meesho_test. */
+/** Schema contract (Milestones 2–5), asserted from information_schema of the migrated meesho_test. */
 
 interface ColumnRow {
   tbl: string;
@@ -483,6 +483,23 @@ describe('schema contract (information_schema of meesho_test)', () => {
       'smallint unsigned',
       'NO',
       null,
+    ]);
+  });
+
+  it('settlement_entries.auto_match_blocked (M5) is TINYINT(1) NOT NULL DEFAULT 0, right after matched_by_user_id', () => {
+    const c = column('settlement_entries', 'auto_match_blocked');
+    expect([c.columnType, c.nullable, c.def]).toEqual([
+      'tinyint(1)',
+      'NO',
+      '0',
+    ]);
+    const entryColumns = columns
+      .filter((col) => col.tbl === 'settlement_entries')
+      .map((col) => col.col);
+    const matchedBy = entryColumns.indexOf('matched_by_user_id');
+    expect(entryColumns.slice(matchedBy, matchedBy + 2)).toEqual([
+      'matched_by_user_id',
+      'auto_match_blocked',
     ]);
   });
 

@@ -21,8 +21,12 @@ import { AuthStateService } from '../../core/auth/auth-state.service';
 import { MeResponse } from '../../core/auth/auth.models';
 import { ImportConfig, ImportDetail } from '../../core/imports/import.models';
 import { SellerAccount } from '../../core/seller-accounts/seller-account.models';
+import {
+  SELECTED_ACCOUNT_STORAGE_PREFIX,
+  SelectedSellerAccountService,
+} from '../../core/seller-accounts/selected-seller-account.service';
 import { WorkspaceContextService } from '../../core/workspaces/workspace-context.service';
-import { IMPORT_ACCOUNT_STORAGE_PREFIX, ImportsPage } from './imports-page';
+import { ImportsPage } from './imports-page';
 
 const MAIN = sellerAccount({ id: '100', displayName: 'Main store' });
 const OUTLET = sellerAccount({ id: '101', displayName: 'Outlet', meeshoSupplierId: null });
@@ -205,21 +209,21 @@ describe('ImportsPage', () => {
 
       expect(preview()).toBeNull();
       expect(notice()).toBe('');
-      expect(localStorage.getItem(`${IMPORT_ACCOUNT_STORAGE_PREFIX}10`)).toBe('101');
+      expect(localStorage.getItem(`${SELECTED_ACCOUNT_STORAGE_PREFIX}10`)).toBe('101');
       flushHistory('101');
       await stable();
       expect(textOf(host())).toContain('For Outlet.');
     });
 
     it('restores the remembered account of the workspace, ignoring a stale one', async () => {
-      localStorage.setItem(`${IMPORT_ACCOUNT_STORAGE_PREFIX}10`, '101');
+      localStorage.setItem(`${SELECTED_ACCOUNT_STORAGE_PREFIX}10`, '101');
       await render();
       expect(accountSelect()?.value).toBe('101');
       flushHistory('101');
       await stable();
 
       fixture.destroy();
-      localStorage.setItem(`${IMPORT_ACCOUNT_STORAGE_PREFIX}10`, '102'); // disabled now
+      localStorage.setItem(`${SELECTED_ACCOUNT_STORAGE_PREFIX}10`, '102'); // disabled now
       await render();
       expect(accountSelect()?.value).toBe('100');
       flushHistory('100');
@@ -241,6 +245,20 @@ describe('ImportsPage', () => {
       flushHistory('101');
       await stable();
       expect(select.value).toBe('101');
+    });
+
+    it('opens on the account picked on another page (the selection is shared)', async () => {
+      TestBed.inject(AuthStateService).setSession(ME_OWNER);
+      const selection = TestBed.inject(SelectedSellerAccountService);
+      selection.refresh();
+      httpTesting.expectOne('/api/v1/workspaces/10/accounts').flush({ items: [MAIN, OUTLET] });
+      expect(selection.select('101')).toBe(true);
+
+      await render();
+      expect(accountSelect()?.value).toBe('101');
+      flushHistory('101');
+      await stable();
+      expect(textOf(host())).toContain('For Outlet.');
     });
 
     it('reloads the accounts when another workspace is selected', async () => {

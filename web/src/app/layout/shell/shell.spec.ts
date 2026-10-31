@@ -47,9 +47,11 @@ describe('Shell', () => {
     ) as HTMLButtonElement;
   const detectChanges = () => harness.fixture.detectChanges();
 
+  // Starts on a page that calls no API (Orders, Settlements and Imports load seller accounts), so
+  // these tests see only the shell's own requests.
   async function createHarness(me: MeResponse = ME_TWO_WORKSPACES): Promise<void> {
     auth.setSession(me);
-    harness = await RouterTestingHarness.create('/orders');
+    harness = await RouterTestingHarness.create('/products');
   }
 
   beforeEach(() => {
@@ -142,6 +144,28 @@ describe('Shell', () => {
       const current = navLinks().filter((a) => a.getAttribute('aria-current') === 'page');
       expect(current.map((a) => a.textContent?.trim())).toEqual(['Reports']);
     });
+
+    it('keeps "Orders" current on an order’s page (/accounts/:accountId/orders/:orderId)', async () => {
+      await harness.navigateByUrl('/accounts/100/orders/9001');
+      httpTesting
+        .expectOne('/api/v1/accounts/100/orders/9001')
+        .flush(null, { status: 404, statusText: 'Not Found' });
+      await harness.fixture.whenStable();
+
+      const current = navLinks().filter((a) => a.getAttribute('aria-current') === 'page');
+      expect(current.map((a) => a.textContent?.trim())).toEqual(['Orders']);
+      expect(navLinks().find((a) => a.textContent?.trim() === 'Orders')?.classList).toContain(
+        'is-active',
+      );
+
+      await harness.navigateByUrl('/settlements?tab=reconciliation');
+      httpTesting.expectOne('/api/v1/workspaces/10/accounts').flush({ items: [] });
+      await harness.fixture.whenStable();
+      const nowCurrent = navLinks().filter((a) => a.getAttribute('aria-current') === 'page');
+      expect(nowCurrent.map((a) => a.textContent?.trim())).toEqual([
+        'Settlements & reconciliation',
+      ]);
+    });
   });
 
   describe('user and workspace', () => {
@@ -211,7 +235,7 @@ describe('Shell', () => {
         'Sign-out failed: Could not reach the server. Check your connection and try again.',
       );
       expect(auth.isAuthenticated()).toBe(true);
-      expect(TestBed.inject(Router).url).toBe('/orders');
+      expect(TestBed.inject(Router).url).toBe('/products');
     });
   });
 });

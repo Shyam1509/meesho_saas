@@ -1,0 +1,67 @@
+<h1 class="text-2xl font-semibold tracking-tight text-slate-900">Settlements &amp; reconciliation</h1>
+<p class="mt-2 max-w-3xl text-sm text-slate-600">
+  The settlement ledger from the Meesho settlement workbooks you imported, and how its entries
+  match your orders.
+</p>
+<p class="mt-2 max-w-3xl text-sm font-medium text-slate-700" data-testid="as-reported-note">
+  {{ note }}
+</p>
+
+<app-seller-account-picker
+  class="mt-6"
+  inputId="settlements-account"
+  purpose="Settlements are kept per seller account."
+  noWorkspaceText="You are not a member of any workspace yet, so there are no settlements to show."
+  (accountChange)="onAccountChange()"
+/>
+
+@for (acc of accounts(); track acc.id) {
+  <div
+    role="tablist"
+    aria-label="Settlements views"
+    class="mt-6 flex gap-1 border-b border-slate-200"
+  >
+    @for (t of tabs; track t.id) {
+      <button
+        type="button"
+        role="tab"
+        [id]="'settlements-tab-' + t.id"
+        [attr.aria-selected]="tab() === t.id ? 'true' : 'false'"
+        [attr.aria-controls]="tab() === t.id ? 'settlements-panel-' + t.id : null"
+        [attr.tabindex]="tab() === t.id ? 0 : -1"
+        class="-mb-px rounded-t-md border-b-2 px-4 py-2 text-sm font-medium"
+        [class]="
+          tab() === t.id
+            ? 'border-accent-700 text-accent-800'
+            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
+        "
+        (click)="selectTab(t.id)"
+        (keydown)="onTabKeydown($event)"
+      >
+        {{ t.label }}
+      </button>
+    }
+  </div>
+
+  @if (tab() === 'entries') {
+    <div
+      role="tabpanel"
+      id="settlements-panel-entries"
+      aria-labelledby="settlements-tab-entries"
+      tabindex="0"
+      class="mt-6 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-600"
+    >
+      <app-settlement-entries-tab [accountId]="acc.id" [accountName]="acc.displayName" />
+    </div>
+  } @else {
+    <div
+      role="tabpanel"
+      id="settlements-panel-reconciliation"
+      aria-labelledby="settlements-tab-reconciliation"
+      tabindex="0"
+      class="mt-6 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-600"
+    >
+      <app-reconciliation-tab [accountId]="acc.id" [accountName]="acc.displayName" />
+    </div>
+  }
+}

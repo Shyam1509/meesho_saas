@@ -6,7 +6,9 @@ Milestone 2 (database and tenancy): 14 tables via migrations + Sequelize models,
 [`db/SCHEMA.md`](db/SCHEMA.md). Milestone 3 (auth and authorization): server-side sessions, CSRF
 protection, rate limiting, workspaces, members and seller accounts with owner/member roles. Milestone 4
 (import pipeline): orders CSV and settlement workbook upload → preview → confirm, with idempotency,
-transactions and order status history (see [Imports](#imports-milestone-4)).
+transactions and order status history (see [Imports](#imports-milestone-4)). Milestone 5 (orders and
+settlements): order list / detail / status history, settlement entries with as-reported totals, and
+settlement ↔ order reconciliation (see [Orders, settlements and reconciliation](#orders-settlements-and-reconciliation-milestone-5)).
 The repository-level README covers the whole project.
 
 ## Setup
@@ -54,13 +56,25 @@ Everything requires a session unless marked public. ids in JSON are strings; tim
 | `DELETE /accounts/:accountId` | owner | disable (idempotent; accounts are never deleted) |
 | `GET /imports/config` | signed in | `{ maxFileMb, maxRows }` (upload limits for the client) |
 | `POST /accounts/:accountId/imports` | member | multipart upload (`file`; `dataAsOf` = YYYY-MM-DD, required for orders CSV, refused for workbooks) → 201 ImportDetail `previewed`; 400 / 404 / 409 (same file already imported, or account disabled) / 413 / 422 `PARSE_ERROR` (no job created) / 429 (20 uploads per minute per IP, or 2 parses already running) |
-| `GET /accounts/:accountId/imports?page&pageSize` | member | `{ items: ImportSummary[], page, pageSize, total }`, newest first |
+| `GET /accounts/:accountId/imports?page&pageSize` | member | `{ items: ImportSummary[], page, pageSize, total }`, newest first (every list: `page` at most 2000, see below) |
 | `GET /imports/:importId` | member | ImportDetail (summary + `preview`: sheets, planned counts, first 10 rows without errors) |
 | `GET /imports/:importId/rows?status&page&pageSize` | member | staged rows in file order; `status` ∈ valid / error / skipped / imported |
 | `GET /imports/:importId/errors?page&pageSize` | member | rows with errors (`error`, or `skipped` after a confirm that skipped them) |
 | `POST /imports/:importId/confirm` `{ skipErrorRows? }` | member | 200 `completed`; 409 not previewed / no valid rows / errors not acknowledged / file already imported / account disabled; 500 system failure (job becomes `failed`) |
 | `POST /imports/:importId/retry` | member | `failed`, or `importing` for more than 15 minutes → runs again from the staged rows → 200 `completed` |
 | `POST /imports/:importId/cancel` | member | `previewed` / `failed` / stale `importing` → `cancelled`; deletes the staged rows (the job and its counts stay) |
+| `GET /accounts/:accountId/orders?page&pageSize&sort&status&from&to&q&settlement` | member | `{ items: OrderSummary[], page, pageSize, total }` (default 25 per page, `-orderDate`) |
+| `GET /accounts/:accountId/orders/statuses` | member | `{ items: [{ status, count }] }`: raw current statuses, most orders first |
+| `GET /accounts/:accountId/orders/:orderId` | member | OrderDetail (status history, matched entries, first / last import); 404 for an order of another account |
+| `GET /accounts/:accountId/orders/:orderId/status-history` | member | `{ items: StatusEvent[] }`, oldest observation first |
+| `GET /accounts/:accountId/settlements?page&pageSize&sort&entryType&from&to&q&match&includeSuperseded` | member | `{ items, page, pageSize, total, totals: { settlementAmount, count } }` (default `-paymentDate`) |
+| `GET /accounts/:accountId/reconciliation` | member | overview: counts and as-reported sums, orders with / without settlement, last run |
+| `GET /accounts/:accountId/reconciliation/unmatched-settlements?page&pageSize&sort` | member | entries with a sub order no and no order |
+| `GET /accounts/:accountId/reconciliation/orders-without-settlement?page&pageSize&status&sort` | member | orders with no matched, non-superseded entry |
+| `GET /accounts/:accountId/reconciliation/runs?page&pageSize` | member | matching runs, newest first |
+| `POST /accounts/:accountId/reconciliation/runs` | member | 201 RunSummary (trigger `manual`); 409 account disabled |
+| `POST /accounts/:accountId/reconciliation/manual-match` `{ settlementEntryId, orderId }` | owner | 200 SettlementEntry; 404 entry / order not in this account; 409 superseded / account-level entry / account disabled |
+| `POST /accounts/:accountId/reconciliation/manual-unmatch` `{ settlementEntryId }` | owner | 200 SettlementEntry; 404; 409 not matched / superseded / account disabled |
 
 Every ImportSummary carries `allowedActions` (`confirm` / `retry` / `cancel`), computed by the server: the UI
 shows only those buttons.
@@ -108,7 +122,8 @@ shows only those buttons.
   client id with one query joined to the caller's membership: not a member (or missing) → 404, member
   without the role → 403. Later queries use only the ids it returns.
 - **Audit**: workspace created/renamed and seller account created/updated/disabled/enabled are written to
-  `audit_logs` (changed fields only) in the same transaction as the change.
+  `audit_logs` (changed fields only) in the same transaction as the change; so are imports (M4) and manual
+  settlement matches / unmatches (M5).
 - **Logs**: request URLs are logged without their query string; Cookie, Set-Cookie, Authorization and
   X-XSRF-TOKEN are redacted; login success logs the user id, failures never log the email.
 - **Caching**: every `/api/v1` response (errors included) carries `Cache-Control: no-store`.
@@ -228,9 +243,10 @@ in India (23:59:59.999 IST). Workbooks use the upload time. Each confirmed order
 `data_as_of >= current_status_observed_at` (an equal time counts as forward; `update` when something changes,
 `unchanged` otherwise, the observation time still advances); an older report only adds history (row action
 `status_event`, its own count: `planned.historyOnly` / `historyOnlyCount`). A blank cell in a newer report never
-erases a value an earlier report gave. Statuses are stored raw (trimmed, case kept); normalisation is M5. Prices are stored as reported
-(per unit vs line total still unknown); `product_id`, settlement matching and `is_estimate` stay NULL / false
-(M5/M6).
+erases a value an earlier report gave. Statuses are stored raw (trimmed, case kept) and M5 keeps them raw (no
+normalisation yet). Prices are stored as reported (per unit vs line total still unknown); `product_id` and
+`is_estimate` stay NULL / false (M6 / supersession deferred). Since M5 every completed confirm also runs the
+settlement ↔ order matcher in the same transaction (see below).
 
 **Audit and logs.** `import.confirmed` (counts) and `import.cancelled` are written to `audit_logs` in the same
 transaction. Logs carry the job id, account id, counts and durations: never row values or file names.
@@ -246,6 +262,92 @@ transaction. Logs carry the job id, account id, counts and durations: never row 
   them). Shared strings are cached in memory (bounded by the 60 MB check).
 - Settlement entries imported with fingerprint v1 (before this change, test data only) are not matched by v2.
 - The preview's planned counts are computed at upload time; confirm recomputes them.
+
+## Orders, settlements and reconciliation (Milestone 5)
+
+> **Amounts are as reported by Meesho, not profit.** Every amount is the value of the source row (DECIMAL text,
+> `null` = not reported, never 0). The only arithmetic is a plain `SUM(settlement_amount)`, done by MySQL in
+> DECIMAL, over exactly the rows the request selects. TCS / TDS are separate columns and are never netted.
+> Contribution / profit formulas are Milestone 7.
+
+**Access.** Reads and "run matching now": members; manual match / unmatch: owner. A non-member gets 404 on every
+route. Every query filters on the workspace + account ids that `requireAccount` resolved, so an order or entry
+id of another account (even in the same workspace) is 404. Matching changes on a disabled account → 409.
+Run / match / unmatch that cannot get the account lock in time (an import holds it: MySQL lock wait timeout
+1205) or lose a deadlock (1213) → 409 "An import or another change is running for this account; try again
+shortly." (rolled back; not recorded as a failed run).
+
+**Lists.** Offset pagination (`page` 1–2000, `pageSize` 1–100, default 25) with `total`. The 2000-page cap
+applies to EVERY list endpoint, imports included (400 above it): deep OFFSET pages make MySQL read and discard
+every earlier row (2000 × 100 = 200 000 rows; staged import rows past 40 000 need `pageSize` ≥ 25). A page,
+its `total` and its `totals` (and every number of the overview) are read in ONE read-only REPEATABLE READ
+transaction, so they agree even while an import commits. `sort` is an allowlisted key,
+`-` prefix = descending, ties break on id in the same direction (stable pages); MySQL puts missing dates first
+ascending and last descending. Unknown parameters, a bad sort key, a repeated `sort`, an unknown entry type /
+match state / settlement filter, a date that is not a real `YYYY-MM-DD`, `to` before `from`, or `q` over 100
+characters → 400. Repeatable filters (`status`, `entryType`) are sent as `?status=A&status=B` (at most 50).
+- Orders: `sort` ∈ `orderDate` (default `-orderDate`), `subOrderNo`, `currentStatus` (case-insensitive order),
+  `updatedAt`; `status` = raw statuses compared exactly (binary, as `GET .../orders/statuses` lists them: `DELIVERED`
+  and `Delivered` are different values); `from` / `to` = order date (inclusive); `settlement=matched|unmatched`.
+- Settlements: `sort` ∈ `paymentDate` (default `-paymentDate`), `settlementAmount`, `orderDate`, `createdAt`;
+  `from` / `to` = payment date; `match=matched|unmatched|account_level`; `includeSuperseded=true|false` (default
+  false).
+- Search `q` (trimmed; blank = no search): sub order no / SKU (orders) or sub order no / transaction id
+  (settlements) STARTING WITH the text, exact case (index friendly); orders also match product names
+  CONTAINING it, any case. `%` and `_` are escaped and match themselves.
+
+**Totals.** `GET .../settlements` returns `totals: { settlementAmount, count }` over ALL rows matching the filters
+(not just the page), always excluding superseded rows, even with `includeSuperseded=true` (then `total` counts
+them but `totals.count` does not). `settlementAmount` is `null` when no row is summed. An order's `settlement`
+is `{ entryCount, amount }` of its matched, non-superseded entries. Repeated transaction IDs are separate rows
+and are each summed.
+
+**Match state** of an entry: `matched` (has an order), `unmatched` (has a sub order no, no order: an exception),
+`account_level` (no sub order no: ads, referral, …; never an exception).
+
+**Automatic matching** runs inside every completed import's confirm transaction (orders AND settlement
+imports, since either may arrive first), after the import's writes and under the same account row lock, and
+records a `reconciliation_runs` row with trigger `import`; `POST .../reconciliation/runs` does the same with
+trigger `manual` (its own READ COMMITTED transaction, account row locked first). The rule: an entry with a sub
+order no, no order, not superseded and not `auto_match_blocked` gets the order of the same account with the
+same sub order no (exact, case-sensitive) → `match_method = 'auto'`, `matched_at`. It never touches an
+existing match (auto or manual), so nothing is re-pointed. An import run looks only at what that job can
+newly match: a settlement import at its own entries (`import_job_id`), an orders import at entries waiting for
+orders it created (`first_import_job_id`); everything matchable before was matched by an earlier confirm. A
+manual run checks the whole account (it also picks up entries left unmatched by older code). A run records `matchedCount` (entries it matched)
+and, after matching, `unmatchedSettlementCount` and `unmatchedOrderCount`. A failing match rolls the import
+back (the job becomes `failed`, retryable); a failing manual run is recorded as a `failed` run.
+
+**Manual match / unmatch** (owner; account row locked; audit row in the same transaction):
+- match `{ settlementEntryId, orderId }`: sets `manual`, `matched_by_user_id`, `matched_at` and clears
+  `auto_match_blocked`; may re-point an existing match. Same order again → 200 without a change (no audit).
+  Audit `settlement_entry.matched` with before / after `{ orderId, matchMethod }`.
+- unmatch `{ settlementEntryId }`: clears the match and sets `auto_match_blocked`, so later runs leave the entry
+  unmatched until someone matches it by hand. Audit `settlement_entry.unmatched`.
+- 404 when the entry or order is not in this account; 409 for a superseded entry, an entry without a sub order
+  no (account-level: an ads cost matched to an order would mislead), or unmatching an entry that is not matched.
+
+**Exceptions.** `unmatched-settlements` = entries with a sub order no, no order, not superseded;
+`orders-without-settlement` = orders with no matched, non-superseded entry (filter by raw `status`). The
+overview counts the same sets.
+
+**Supersession: deferred.** No real file shows how Meesho revises figures (`is_estimate` is never set), so
+nothing sets `superseded_by_entry_id` yet. Every total, exception list, order summary and match already
+excludes superseded rows, and manual (un)matching refuses them, so a later milestone can add it safely.
+
+**Indexes.** None added. EXPLAIN with 20,000 orders and 20,000 entries in each of two accounts: every query is an
+index lookup on the account (`ref` / `range` / `eq_ref` on an existing account-prefixed key: order date, payment
+date, order id, sub order no); default pages read in index order and stop at the page size. Counts, sums, the
+status filter and search read the account's rows through those keys (no cross-account scans). Matching: an
+import run uses `ix_orders_account_first_import_job` / `ix_settlement_entries_account_import_job` (an import
+with nothing new to match took 1–2 ms on 20k rows); the manual whole-account pass took 0.2–0.5 s with nothing
+left to match.
+
+**Limitations.** Synthetic fixtures only (no real Meesho file yet). Statuses are raw: case and spelling variants
+are separate statuses. Settlement search does not look at the matched order's SKU. Runs are synchronous inside
+the request and the confirm transaction: on the dev MySQL (READ COMMITTED, two 20k accounts) one job that newly
+matches 16,200 entries took ~4.2 s (the row writes themselves), and the after-run exception counts 0.1–0.3 s
+per confirm. Batch or queue it if real files are much larger (later decision).
 
 Errors always use `{ "error": { "code", "message", "requestId", "details"? } }`; codes and
 their HTTP status live in `src/common/errors/error-codes.ts` (an `ApiException` carries an explicit code,

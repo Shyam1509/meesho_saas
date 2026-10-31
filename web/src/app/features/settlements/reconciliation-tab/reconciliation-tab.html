@@ -1,0 +1,387 @@
+<div role="status" aria-live="polite" data-testid="reconciliation-notice">
+  @if (notice()) {
+    <p
+      class="mb-4 max-w-3xl rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800"
+    >
+      {{ notice() }}
+    </p>
+  }
+</div>
+
+<!-- Overview -->
+@let ov = overview();
+<section
+  aria-labelledby="reconciliation-overview-heading"
+  [attr.aria-busy]="ov.kind === 'loading' || (ov.kind === 'ready' && ov.busy)"
+  [attr.data-state]="ov.kind"
+  data-testid="overview"
+>
+  <h2 id="reconciliation-overview-heading" class="text-lg font-semibold text-slate-900">
+    Overview
+  </h2>
+  <p class="mt-1 max-w-3xl text-sm text-slate-600">
+    Counts and sums cover all entries and orders of {{ accountName() }} (superseded entries are
+    never summed). {{ note }}
+  </p>
+  @if (ov.kind === 'loading') {
+    <p role="status" class="mt-3 text-sm text-slate-700">Loading the overview…</p>
+  } @else if (ov.kind === 'error') {
+    <div role="alert" class="mt-3 max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The reconciliation overview could not be loaded.</p>
+      <p class="mt-1 text-red-800">{{ ov.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="refresh()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else {
+    @let o = ov.value;
+    <h3 class="mt-4 text-sm font-semibold text-slate-800">Settlement entries</h3>
+    <dl class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="settlement-cards">
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-600">All entries</dt>
+        <dd class="mt-1 text-xl font-semibold text-slate-900 tabular-nums">
+          {{ o.settlements.total | count }}
+        </dd>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-600">Matched to an order</dt>
+        <dd class="mt-1 text-xl font-semibold text-slate-900 tabular-nums">
+          {{ o.settlements.matched | count }}
+        </dd>
+        <dd class="text-xs text-slate-600">
+          Settlement amount (as reported):
+          <app-amount class="tabular-nums" [value]="o.settlements.matchedAmount" />
+        </dd>
+      </div>
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <dt class="text-sm text-amber-900">Unmatched (need a look)</dt>
+        <dd class="mt-1 text-xl font-semibold text-amber-900 tabular-nums">
+          {{ o.settlements.unmatched | count }}
+        </dd>
+        <dd class="text-xs text-amber-900">
+          Settlement amount (as reported):
+          <app-amount class="tabular-nums" [value]="o.settlements.unmatchedAmount" />
+        </dd>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-600">Account-level (ads, referral, …)</dt>
+        <dd class="mt-1 text-xl font-semibold text-slate-900 tabular-nums">
+          {{ o.settlements.accountLevel | count }}
+        </dd>
+        <dd class="text-xs text-slate-600">
+          Settlement amount (as reported):
+          <app-amount class="tabular-nums" [value]="o.settlements.accountLevelAmount" />
+        </dd>
+      </div>
+    </dl>
+    <h3 class="mt-4 text-sm font-semibold text-slate-800">Orders</h3>
+    <dl class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="order-cards">
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-600">All orders</dt>
+        <dd class="mt-1 text-xl font-semibold text-slate-900 tabular-nums">
+          {{ o.orders.total | count }}
+        </dd>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-600">With a matched settlement</dt>
+        <dd class="mt-1 text-xl font-semibold text-slate-900 tabular-nums">
+          {{ o.orders.withSettlement | count }}
+        </dd>
+      </div>
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <dt class="text-sm text-amber-900">Without a matched settlement</dt>
+        <dd class="mt-1 text-xl font-semibold text-amber-900 tabular-nums">
+          {{ o.orders.withoutSettlement | count }}
+        </dd>
+      </div>
+    </dl>
+
+    <div
+      class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4"
+      data-testid="last-run"
+    >
+      <div class="text-sm">
+        <p class="font-medium text-slate-900">Last matching run</p>
+        @if (o.lastRun; as run) {
+          <p class="text-slate-700">
+            {{ run.startedAt | displayDateTime }} · {{ runTriggerLabel(run.triggerType) }} ·
+            {{ runStatusLabel(run.status) }}
+            @if (run.status === 'completed') {
+              · {{ run.matchedCount | count }} matched
+            }
+          </p>
+        } @else {
+          <p class="text-slate-700">No matching run yet.</p>
+        }
+        <p class="mt-1 text-xs text-slate-600">
+          Matching runs after every import. It links an entry to the order with the same sub order
+          no.; entries matched or unmatched by hand are left alone.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+        [attr.aria-disabled]="running() ? 'true' : null"
+        (click)="runNow()"
+      >
+        {{ running() ? 'Matching…' : 'Run matching now' }}
+      </button>
+    </div>
+  }
+  @if (runError(); as message) {
+    <div role="alert" class="mt-3 max-w-2xl rounded-md border border-red-200 bg-red-50 p-3 text-sm">
+      <p class="font-medium text-red-800">Matching could not be run.</p>
+      <p class="mt-1 text-red-800">{{ message }}</p>
+    </div>
+  }
+  @if (failedRun(); as message) {
+    <p role="alert" class="mt-3 max-w-2xl rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+      {{ message }}
+    </p>
+  }
+</section>
+
+<!-- Unmatched settlement entries -->
+@let um = unmatched();
+<section
+  aria-labelledby="unmatched-heading"
+  class="mt-10"
+  [attr.aria-busy]="um.kind === 'loading' || (um.kind === 'ready' && um.busy)"
+  [attr.data-state]="um.kind"
+  data-testid="unmatched"
+>
+  <h2 id="unmatched-heading" class="text-lg font-semibold text-slate-900">
+    Unmatched settlement entries
+  </h2>
+  <p class="mt-1 max-w-3xl text-sm text-slate-600">
+    Entries with a sub order no. that no order of this account has.
+    @if (isOwner()) {
+      Match one by hand if you know its order.
+    }
+  </p>
+  @if (um.kind === 'loading') {
+    <p role="status" class="mt-3 text-sm text-slate-700">Loading unmatched entries…</p>
+  } @else if (um.kind === 'error') {
+    <div role="alert" class="mt-3 max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The unmatched entries could not be loaded.</p>
+      <p class="mt-1 text-red-800">{{ um.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="refresh()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else if (um.value.total === 0 && um.value.items.length === 0) {
+    <p class="mt-3 text-sm text-slate-700" data-testid="no-unmatched">
+      No unmatched settlement entries.
+    </p>
+  } @else {
+    <app-settlement-entries-table
+      class="mt-3"
+      [entries]="um.value.items"
+      [accountId]="accountId()"
+      caption="Unmatched settlement entries"
+      [action]="isOwner() ? 'match' : null"
+      (actionRequested)="askMatch($event)"
+    />
+    <app-pager
+      class="mt-3"
+      [page]="um.value.page"
+      [pageSize]="um.value.pageSize"
+      [total]="um.value.total"
+      label="Unmatched entry pages"
+      itemLabel="entries"
+      [busy]="um.busy"
+      (pageChange)="unmatchedPage.set($event)"
+    />
+  }
+</section>
+
+<!-- Orders without a settlement -->
+@let wo = without();
+<section
+  aria-labelledby="without-heading"
+  class="mt-10"
+  [attr.aria-busy]="wo.kind === 'loading' || (wo.kind === 'ready' && wo.busy)"
+  [attr.data-state]="wo.kind"
+  data-testid="without-settlement"
+>
+  <h2 id="without-heading" class="text-lg font-semibold text-slate-900">
+    Orders without a matched settlement
+  </h2>
+  <p class="mt-1 max-w-3xl text-sm text-slate-600">
+    Not every order is settled yet (for example cancelled or recent orders), so this list is a
+    starting point, not an error list.
+  </p>
+  <div class="mt-3 max-w-xs">
+    <label for="without-status" class="block text-sm font-medium text-slate-800">Status</label>
+    <select
+      id="without-status"
+      class="mt-1 block w-full rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+      (change)="changeWithoutStatus($event)"
+    >
+      <option value="" [selected]="withoutStatus() === ''">All statuses</option>
+      @for (option of statusOptions(); track option.status) {
+        <option [value]="option.status" [selected]="withoutStatus() === option.status">
+          {{ option.status }} ({{ option.count | count }})
+        </option>
+      }
+    </select>
+  </div>
+  @if (wo.kind === 'loading') {
+    <p role="status" class="mt-3 text-sm text-slate-700">Loading orders…</p>
+  } @else if (wo.kind === 'error') {
+    <div role="alert" class="mt-3 max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The orders without a settlement could not be loaded.</p>
+      <p class="mt-1 text-red-800">{{ wo.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="refresh()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else if (wo.value.total === 0 && wo.value.items.length === 0) {
+    <p class="mt-3 text-sm text-slate-700" data-testid="no-without">
+      @if (withoutStatus()) {
+        No orders with this status are without a settlement.
+      } @else {
+        Every order has a matched settlement.
+      }
+    </p>
+  } @else {
+    <app-orders-table
+      class="mt-3"
+      [orders]="wo.value.items"
+      [accountId]="accountId()"
+      caption="Orders without a matched settlement"
+    />
+    <app-pager
+      class="mt-3"
+      [page]="wo.value.page"
+      [pageSize]="wo.value.pageSize"
+      [total]="wo.value.total"
+      label="Pages of orders without a settlement"
+      itemLabel="orders"
+      [busy]="wo.busy"
+      (pageChange)="withoutPage.set($event)"
+    />
+  }
+</section>
+
+<!-- Run history -->
+@let rs = runs();
+<section
+  aria-labelledby="runs-heading"
+  class="mt-10"
+  [attr.aria-busy]="rs.kind === 'loading' || (rs.kind === 'ready' && rs.busy)"
+  [attr.data-state]="rs.kind"
+  data-testid="runs"
+>
+  <h2 id="runs-heading" class="text-lg font-semibold text-slate-900">Matching runs</h2>
+  @if (rs.kind === 'loading') {
+    <p role="status" class="mt-3 text-sm text-slate-700">Loading the run history…</p>
+  } @else if (rs.kind === 'error') {
+    <div role="alert" class="mt-3 max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The run history could not be loaded.</p>
+      <p class="mt-1 text-red-800">{{ rs.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="refresh()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else if (rs.value.total === 0 && rs.value.items.length === 0) {
+    <p class="mt-3 text-sm text-slate-700" data-testid="no-runs">No matching runs yet.</p>
+  } @else {
+    <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <caption class="sr-only">
+          Matching runs, newest first
+        </caption>
+        <thead class="bg-slate-50">
+          <tr>
+            <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Started</th>
+            <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Trigger</th>
+            <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Status</th>
+            <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+              Matched
+            </th>
+            <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+              Unmatched entries
+            </th>
+            <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+              Orders without settlement
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          @for (run of rs.value.items; track run.id) {
+            <tr [attr.data-run-id]="run.id">
+              <th scope="row" class="px-4 py-3 text-left align-top font-normal whitespace-nowrap">
+                <time [attr.datetime]="run.startedAt">{{ run.startedAt | displayDateTime }}</time>
+              </th>
+              <td class="px-4 py-3 align-top text-slate-700">
+                {{ runTriggerLabel(run.triggerType) }}
+                @if (run.importJobId) {
+                  <a
+                    [routerLink]="['/imports', run.importJobId]"
+                    class="block rounded-sm text-xs text-accent-700 underline hover:text-accent-800"
+                  >
+                    View the import
+                  </a>
+                }
+                @if (run.triggeredBy; as user) {
+                  <span class="block text-xs text-slate-600">by {{ userName(user) }}</span>
+                }
+              </td>
+              <td class="px-4 py-3 align-top text-slate-700">
+                {{ runStatusLabel(run.status) }}
+                @if (run.failureMessage) {
+                  <span class="block text-xs text-red-700">{{ run.failureMessage }}</span>
+                }
+              </td>
+              <td class="px-4 py-3 text-right align-top tabular-nums">
+                {{ run.matchedCount | count }}
+              </td>
+              <td class="px-4 py-3 text-right align-top tabular-nums">
+                {{ run.unmatchedSettlementCount | count }}
+              </td>
+              <td class="px-4 py-3 text-right align-top tabular-nums">
+                {{ run.unmatchedOrderCount | count }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <app-pager
+      class="mt-3"
+      [page]="rs.value.page"
+      [pageSize]="rs.value.pageSize"
+      [total]="rs.value.total"
+      label="Matching run pages"
+      itemLabel="runs"
+      [busy]="rs.busy"
+      (pageChange)="runsPage.set($event)"
+    />
+  }
+</section>
+
+@if (matchTarget(); as entry) {
+  <app-match-order-dialog
+    [accountId]="accountId()"
+    [entry]="entry"
+    (matched)="onMatched($event)"
+    (cancelled)="closeMatch()"
+  />
+}

@@ -1,0 +1,219 @@
+<a
+  routerLink="/orders"
+  class="inline-block rounded-sm text-sm font-medium text-accent-700 underline hover:text-accent-800"
+>
+  <span aria-hidden="true">← </span>All orders
+</a>
+
+<h1 class="mt-3 text-2xl font-semibold tracking-tight break-all text-slate-900">
+  {{ heading() }}
+</h1>
+
+@let view = state();
+<div class="mt-4" [attr.aria-busy]="view.kind === 'loading'" [attr.data-state]="view.kind">
+  @if (view.kind === 'loading') {
+    <p role="status" class="text-sm text-slate-700">Loading the order…</p>
+  } @else if (view.kind === 'not-found') {
+    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">This order was not found.</p>
+      <p class="mt-1 text-red-800">
+        Check the link. The order may also belong to another seller account or to a workspace you
+        are not a member of.
+      </p>
+    </div>
+  } @else if (view.kind === 'error') {
+    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The order could not be loaded.</p>
+      <p class="mt-1 text-red-800">{{ view.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="retry()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else {
+    @let order = view.order;
+    <section aria-labelledby="order-fields-heading" class="max-w-4xl">
+      <h2 id="order-fields-heading" class="sr-only">Order fields</h2>
+      <dl
+        class="grid grid-cols-1 gap-x-6 gap-y-3 rounded-lg border border-slate-200 bg-white p-5 text-sm sm:grid-cols-2 lg:grid-cols-3"
+        data-testid="order-fields"
+      >
+        <div>
+          <dt class="text-slate-600">Sub order no.</dt>
+          <dd class="font-medium break-all text-slate-900">{{ order.subOrderNo }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Order no.</dt>
+          <dd class="break-all text-slate-900">{{ order.orderNo ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Order date</dt>
+          <dd class="text-slate-900">{{ order.orderDate | displayDate }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Current status</dt>
+          <dd class="text-slate-900">
+            <span class="font-medium">{{ order.currentStatus ?? missing }}</span>
+            @if (order.currentStatusObservedAt) {
+              <span class="block text-xs text-slate-600">
+                as of {{ order.currentStatusObservedAt | displayDateTime }}
+              </span>
+            }
+          </dd>
+        </div>
+        <div class="sm:col-span-2">
+          <dt class="text-slate-600">Product</dt>
+          <dd class="text-slate-900">{{ order.productName ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">SKU</dt>
+          <dd class="break-all text-slate-900">{{ order.sku ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Size</dt>
+          <dd class="text-slate-900">{{ order.size ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Quantity</dt>
+          <dd class="text-slate-900 tabular-nums">{{ order.quantity | count }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Catalog ID</dt>
+          <dd class="break-all text-slate-900">{{ order.catalogId ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Packet ID</dt>
+          <dd class="break-all text-slate-900">{{ order.packetId ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Customer state</dt>
+          <dd class="text-slate-900">{{ order.customerState ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Supplier listed price</dt>
+          <dd class="text-slate-900 tabular-nums">
+            <app-amount [value]="order.supplierListedPrice" />
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Supplier discounted price</dt>
+          <dd class="text-slate-900 tabular-nums">
+            <app-amount [value]="order.supplierDiscountedPrice" />
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">First imported from</dt>
+          <dd>
+            <a
+              [routerLink]="['/imports', order.firstImport.id]"
+              class="rounded-sm break-all text-accent-700 underline hover:text-accent-800"
+            >
+              {{ order.firstImport.originalFilename }}
+            </a>
+            <span class="block text-xs text-slate-600">
+              {{ order.firstImport.createdAt | displayDateTime }}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Last updated by</dt>
+          <dd>
+            <a
+              [routerLink]="['/imports', order.lastImport.id]"
+              class="rounded-sm break-all text-accent-700 underline hover:text-accent-800"
+            >
+              {{ order.lastImport.originalFilename }}
+            </a>
+            <span class="block text-xs text-slate-600">
+              {{ order.lastImport.createdAt | displayDateTime }}
+            </span>
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="order-history-heading" class="mt-8 max-w-3xl">
+      <h2 id="order-history-heading" class="text-lg font-semibold text-slate-900">
+        Status history
+      </h2>
+      <p class="mt-1 text-sm text-slate-600">
+        Every status a report showed for this order, oldest first, with the import it came from.
+      </p>
+      @if (view.history.length === 0) {
+        <p class="mt-3 text-sm text-slate-700" data-testid="no-history">
+          No status history was saved for this order.
+        </p>
+      } @else {
+        <ol class="mt-3 space-y-0 border-l-2 border-slate-200 pl-5" data-testid="status-history">
+          @for (event of view.history; track event.id; let last = $last) {
+            <li class="relative pb-4" [attr.data-event-id]="event.id">
+              <span
+                aria-hidden="true"
+                class="absolute top-1.5 -left-[27px] size-3 rounded-full ring-2 ring-white"
+                [class]="last ? 'bg-accent-700' : 'bg-slate-400'"
+              ></span>
+              <p class="text-sm">
+                <span class="font-medium text-slate-900">{{ event.status }}</span>
+                @if (last) {
+                  <span class="text-xs text-slate-600"> (current)</span>
+                }
+              </p>
+              <p class="text-xs text-slate-600">
+                <time [attr.datetime]="event.observedAt">
+                  {{ event.observedAt | displayDateTime }}
+                </time>
+                · from
+                <a
+                  [routerLink]="['/imports', event.importJob.id]"
+                  class="rounded-sm break-all text-accent-700 underline hover:text-accent-800"
+                >
+                  {{ event.importJob.originalFilename }}
+                </a>
+              </p>
+            </li>
+          }
+        </ol>
+      }
+    </section>
+
+    <section aria-labelledby="order-settlements-heading" class="mt-8">
+      <h2 id="order-settlements-heading" class="text-lg font-semibold text-slate-900">
+        Settlements
+      </h2>
+      <p class="mt-1 max-w-3xl text-sm text-slate-600">{{ asReportedNote }}</p>
+      <div
+        class="mt-3 inline-block rounded-lg border border-slate-200 bg-white px-5 py-3"
+        data-testid="settled-summary"
+      >
+        <p class="text-sm text-slate-600">Settled (as reported)</p>
+        @if (order.settlement.entryCount === 0) {
+          <p class="text-base font-semibold text-amber-800">No settlement matched yet</p>
+        } @else {
+          <p class="text-xl font-semibold text-slate-900 tabular-nums">
+            <app-amount [value]="order.settlement.amount" />
+          </p>
+          <p class="text-xs text-slate-600">
+            Sum of the settlement amount of {{ order.settlement.entryCount | count }} matched
+            {{ order.settlement.entryCount === 1 ? 'entry' : 'entries' }}.
+          </p>
+        }
+      </div>
+      @if (order.settlements.length === 0) {
+        <p class="mt-3 text-sm text-slate-700" data-testid="no-settlements">
+          No settlement entries are matched to this order yet.
+        </p>
+      } @else {
+        <app-settlement-entries-table
+          class="mt-4"
+          [entries]="order.settlements"
+          [accountId]="accountId()"
+          [caption]="'Settlement entries matched to order ' + order.subOrderNo"
+          [showOrderLink]="false"
+        />
+      }
+    </section>
+  }
+</div>

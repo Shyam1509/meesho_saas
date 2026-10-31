@@ -518,6 +518,9 @@ describe('xlsx reader', () => {
   });
 
   it('an EMPTY cell far to the right (column XFD) rejects the file at its first row, before reading the rest', async () => {
+    // Behavioural, not wall-clock: the row cap is 2 (header + the first XFD row). The column check must
+    // fire on row 2; if the reader went on to row 3 of the 3000, the cap would reject it as "too many rows"
+    // instead, and the visitor sees only the header.
     const rows = [
       '<row r="1"><c r="A1" t="inlineStr"><is><t>Date</t></is></c></row>',
     ];
@@ -529,7 +532,6 @@ describe('xlsx reader', () => {
     const zip = Buffer.from(zipSync(sheetZip('Ads Cost', rows.join(''))));
     let seen = 0;
     const structure = readWorkbookStructure(zip, inspectZip(zip));
-    const started = Date.now();
     await expect(
       streamWorkbookRows(
         zip,
@@ -541,7 +543,7 @@ describe('xlsx reader', () => {
             return true;
           },
         }),
-        { maxPhysicalRows: 10_000, tooManyRowsReason: 'too many rows' },
+        { maxPhysicalRows: 2, tooManyRowsReason: 'too many rows' },
       ),
     ).rejects.toEqual(
       FileRejectedError.of(
@@ -550,7 +552,6 @@ describe('xlsx reader', () => {
       ),
     );
     expect(seen).toBe(1);
-    expect(Date.now() - started).toBeLessThan(2000);
   });
 
   it('a ZIP without any worksheet is not a workbook', () => {

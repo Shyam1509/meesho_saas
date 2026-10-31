@@ -114,8 +114,14 @@ export async function deleteRunData(
      WHERE actor_user_id IN (SELECT id FROM users WHERE email LIKE :pattern)
         OR workspace_id IN (${runWorkspaces})`,
   );
-  // Imported data of the run's accounts: entries and events → orders → jobs (their rows cascade).
+  // A superseded entry references a later entry of the same account (RESTRICT, checked row by row).
+  await run(
+    `UPDATE settlement_entries SET superseded_by_entry_id = NULL
+     WHERE workspace_id IN (${runWorkspaces}) AND superseded_by_entry_id IS NOT NULL`,
+  );
+  // Imported data of the run's accounts: matching runs, entries and events → orders → jobs (rows cascade).
   for (const table of [
+    'reconciliation_runs',
     'settlement_entries',
     'order_status_events',
     'orders',

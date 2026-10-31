@@ -46,8 +46,24 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/overview/overview-page').then((m) => m.OverviewPage),
       },
-      placeholderRoute('orders', 'Orders', [5]),
-      placeholderRoute('settlements', 'Settlements & reconciliation', [5]),
+      {
+        path: 'orders',
+        title: 'Orders',
+        loadComponent: () => import('./features/orders/orders-page').then((m) => m.OrdersPage),
+      },
+      {
+        // The account is part of the path: an order id alone does not say which account it is in.
+        path: 'accounts/:accountId/orders/:orderId',
+        title: 'Order details',
+        loadComponent: () =>
+          import('./features/orders/order-detail-page').then((m) => m.OrderDetailPage),
+      },
+      {
+        path: 'settlements',
+        title: 'Settlements & reconciliation',
+        loadComponent: () =>
+          import('./features/settlements/settlements-page').then((m) => m.SettlementsPage),
+      },
       placeholderRoute('products', 'Products & costs', [6]),
       placeholderRoute('expenses', 'Expenses', [6]),
       {

@@ -10,7 +10,17 @@ import {
   ImportSummary,
   PagedResponse,
 } from '../app/core/imports/import.models';
+import { ImportRef } from '../app/core/api/refs';
+import { OrderDetail, OrderSummary, StatusEvent } from '../app/core/orders/order.models';
+import {
+  ReconciliationOverview,
+  RunSummary,
+} from '../app/core/reconciliation/reconciliation.models';
 import { SellerAccount } from '../app/core/seller-accounts/seller-account.models';
+import {
+  SettlementEntry,
+  SettlementListResponse,
+} from '../app/core/settlements/settlement.models';
 
 /** Owner of "Asha Textiles" (id 10) and member of "Bharat Traders" (id 20). */
 export const ME_TWO_WORKSPACES: MeResponse = {
@@ -208,4 +218,175 @@ export function typeInto(input: HTMLInputElement, value: string): void {
   input.value = value;
   input.dispatchEvent(new Event('input'));
   input.dispatchEvent(new Event('blur'));
+}
+
+/** The import a record came from. */
+export function importRef(overrides: Partial<ImportRef> = {}): ImportRef {
+  return {
+    id: '500',
+    originalFilename: 'orders-oct.csv',
+    createdAt: '2026-10-30T08:30:00.000Z',
+    ...overrides,
+  };
+}
+
+/** Order SO-1001 (id 9001) of account 100, delivered, with one matched entry of ₹1,180.40. */
+export function orderSummary(overrides: Partial<OrderSummary> = {}): OrderSummary {
+  return {
+    id: '9001',
+    subOrderNo: 'SO-1001',
+    orderNo: 'ORD-77',
+    orderDate: '2026-10-05',
+    productName: 'Cotton kurta',
+    sku: 'KURTA-M',
+    size: 'M',
+    quantity: 1,
+    customerState: 'Gujarat',
+    supplierListedPrice: '1249.50',
+    supplierDiscountedPrice: '1199.00',
+    currentStatus: 'Delivered',
+    currentStatusObservedAt: '2026-10-29T18:29:59.999Z',
+    settlement: { entryCount: 1, amount: '1180.40' },
+    ...overrides,
+  };
+}
+
+export function statusEvent(overrides: Partial<StatusEvent> = {}): StatusEvent {
+  return {
+    id: '70',
+    status: 'Shipped',
+    observedAt: '2026-10-10T18:29:59.999Z',
+    importJob: importRef({ id: '480', originalFilename: 'orders-early-oct.csv' }),
+    ...overrides,
+  };
+}
+
+/** A matched (auto) order payment of ₹1,180.40 for SO-1001 / order 9001. */
+export function settlementEntry(overrides: Partial<SettlementEntry> = {}): SettlementEntry {
+  return {
+    id: '3001',
+    entryType: 'order_payment',
+    sheetName: 'Order Payments',
+    transactionId: 'TXN-1',
+    subOrderNo: 'SO-1001',
+    orderDate: '2026-10-05',
+    paymentDate: '2026-10-20',
+    settlementAmount: '1180.40',
+    saleAmount: '1199.00',
+    returnAmount: null,
+    commissionAmount: '-12.60',
+    shippingCharge: '0',
+    tcsAmount: '-5.00',
+    tdsAmount: '-1.00',
+    recoveryAmount: null,
+    compensationAmount: null,
+    isEstimate: false,
+    supersededByEntryId: null,
+    importJob: importRef({ id: '510', originalFilename: 'settlement-oct.xlsx' }),
+    createdAt: '2026-10-30T09:00:00.000Z',
+    match: {
+      state: 'matched',
+      method: 'auto',
+      orderId: '9001',
+      orderSubOrderNo: 'SO-1001',
+      matchedAt: '2026-10-30T09:00:01.000Z',
+      matchedBy: null,
+      autoMatchBlocked: false,
+    },
+    ...overrides,
+  };
+}
+
+/** An entry with a sub order no. that no order has. */
+export function unmatchedEntry(overrides: Partial<SettlementEntry> = {}): SettlementEntry {
+  return settlementEntry({
+    id: '3002',
+    transactionId: 'TXN-2',
+    subOrderNo: 'SO-9999',
+    settlementAmount: '450.00',
+    match: {
+      state: 'unmatched',
+      method: null,
+      orderId: null,
+      orderSubOrderNo: null,
+      matchedAt: null,
+      matchedBy: null,
+      autoMatchBlocked: false,
+    },
+    ...overrides,
+  });
+}
+
+/** {@link orderSummary} with fields, two status events (oldest first) and its matched entry. */
+export function orderDetail(overrides: Partial<OrderDetail> = {}): OrderDetail {
+  return {
+    ...orderSummary(overrides),
+    catalogId: 'CAT-5',
+    packetId: null,
+    createdAt: '2026-10-11T08:00:00.000Z',
+    updatedAt: '2026-10-30T08:30:00.000Z',
+    firstImport: importRef({ id: '480', originalFilename: 'orders-early-oct.csv' }),
+    lastImport: importRef(),
+    statusHistory: [
+      statusEvent(),
+      statusEvent({
+        id: '71',
+        status: 'Delivered',
+        observedAt: '2026-10-29T18:29:59.999Z',
+        importJob: importRef(),
+      }),
+    ],
+    settlements: [settlementEntry()],
+    ...overrides,
+  };
+}
+
+export function settlementList(
+  items: SettlementEntry[],
+  totals: SettlementListResponse['totals'] = { settlementAmount: '1180.40', count: items.length },
+  page = 1,
+  total = items.length,
+  pageSize = 25,
+): SettlementListResponse {
+  return { items, page, pageSize, total, totals };
+}
+
+export function runSummary(overrides: Partial<RunSummary> = {}): RunSummary {
+  return {
+    id: '40',
+    triggerType: 'import',
+    status: 'completed',
+    importJobId: '510',
+    triggeredBy: null,
+    startedAt: '2026-10-30T09:00:00.000Z',
+    finishedAt: '2026-10-30T09:00:01.000Z',
+    matchedCount: 12,
+    unmatchedSettlementCount: 2,
+    unmatchedOrderCount: 5,
+    failureMessage: null,
+    ...overrides,
+  };
+}
+
+export function reconciliationOverview(
+  overrides: Partial<ReconciliationOverview> = {},
+): ReconciliationOverview {
+  return {
+    lastRun: runSummary(),
+    settlements: {
+      total: 20,
+      matched: 12,
+      unmatched: 2,
+      accountLevel: 6,
+      matchedAmount: '14250.75',
+      unmatchedAmount: '900.00',
+      accountLevelAmount: '-320.50',
+    },
+    orders: { total: 17, withSettlement: 12, withoutSettlement: 5 },
+    withoutSettlementByStatus: [
+      { status: 'Shipped', count: 3 },
+      { status: 'Cancelled', count: 2 },
+    ],
+    ...overrides,
+  };
 }

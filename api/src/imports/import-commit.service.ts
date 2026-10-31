@@ -30,6 +30,7 @@ import {
   findActiveDuplicate,
   ImportsService,
 } from './imports.service';
+import { ReconciliationMatcherService } from '../reconciliation/reconciliation-matcher.service';
 import { FINGERPRINT_VERSION } from './parsing/fingerprint';
 import type { RowValues } from './parsing/parsed-report';
 import {
@@ -111,6 +112,9 @@ function orderColumns(values: OrderValues) {
  * (retryable). The job is moved to 'importing' first, in its own statement, so the active-file unique key
  * refuses a second import of the same file; a crash after that point leaves it 'importing', which may be
  * retried or cancelled once it is stale (15 minutes after confirmed_at).
+ * Milestone 5: after the job's rows are written (orders OR settlements: either side may arrive first) the
+ * settlement ↔ order matcher runs in the SAME transaction, under the same account lock, and records a
+ * reconciliation_runs row with trigger 'import'; a failing match rolls the whole import back.
  */
 @Injectable()
 export class ImportCommitService {
@@ -121,6 +125,7 @@ export class ImportCommitService {
     private readonly access: WorkspaceAccessService,
     private readonly audit: AuditService,
     private readonly imports: ImportsService,
+    private readonly matcher: ReconciliationMatcherService,
   ) {}
 
   async confirm(
@@ -307,6 +312,20 @@ export class ImportCommitService {
               `import job ${jobId} lost its claim before completing`,
             );
           }
+          // After every write of this import: match what this job can newly match (account still locked).
+          const reconciliation = await this.matcher.matchAndRecord(
+            {
+              workspaceId: job.workspaceId,
+              sellerAccountId: job.sellerAccountId,
+            },
+            {
+              type: 'import',
+              importJobId: job.id,
+              reportType: job.reportType,
+              userId: actor.userId,
+            },
+            transaction,
+          );
           await this.audit.record(
             {
               action: 'import.confirmed',
@@ -329,7 +348,12 @@ export class ImportCommitService {
             },
             transaction,
           );
-          return { ...result, skipped };
+          return {
+            ...result,
+            skipped,
+            reconciliationRunId: reconciliation.id,
+            autoMatched: reconciliation.matchedCount,
+          };
         },
       );
       this.logger.log(

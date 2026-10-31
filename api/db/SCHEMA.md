@@ -1,10 +1,10 @@
-# Database schema (Milestones 2–4)
+# Database schema (Milestones 2–5)
 
 MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrations in
 `db/migrations` (one table per migration: `20261030000001` … `20261030000014` in Milestone 2,
 `20261030000015-create-user-sessions` in Milestone 3; then column changes:
 `20261030000016-add-import-jobs-data-as-of-and-preview` and `20261030000017-add-import-jobs-history-only-count`
-in Milestone 4); the app never syncs.
+in Milestone 4, `20261031000018-add-settlement-entries-auto-match-blocked` in Milestone 5); the app never syncs.
 `test/db/*.db-spec.ts` asserts everything below against a freshly migrated `meesho_test`.
 
 ## Conventions
@@ -81,7 +81,7 @@ Workspace-only rows of `expenses` and `audit_logs` are still checked by their si
 | `product_cost_history` | Effective-dated unit cost (`DECIMAL(12,4)`, `>= 0`, INR) | `(product_id, effective_from)` | product, created_by → users |
 | `orders` | Canonical order line = Meesho sub-order; raw `current_status` + observed time; first/last import job and the source row of the current values | `(seller_account_id, sub_order_no)`, `(seller_account_id, id)` | account, product, first/last import job, last import row (all composite) |
 | `order_status_events` | Append-only status observations, account-scoped | `(order_id, import_job_id)` | account, order, import job, import row (all composite) |
-| `settlement_entries` | One settlement workbook row; `entry_type` per sheet; amounts as reported; `is_estimate`; fingerprint + version; supersession; match fields | `(seller_account_id, entry_fingerprint)`, `(seller_account_id, id)`; `transaction_id` is an index, **not unique** | account, import job, import row, order, superseding entry (all composite); matched_by → users |
+| `settlement_entries` | One settlement workbook row; `entry_type` per sheet; amounts as reported; `is_estimate`; fingerprint + version; supersession; match fields; `auto_match_blocked` (M5: `TINYINT(1) NOT NULL DEFAULT 0`, set by a manual unmatch so auto-match skips the entry) | `(seller_account_id, entry_fingerprint)`, `(seller_account_id, id)`; `transaction_id` is an index, **not unique** | account, import job, import row, order, superseding entry (all composite); matched_by → users |
 | `expenses` | Manual expense, `scope` workspace/account, `amount > 0`, INR | — | workspace; account (composite); created_by → users |
 | `reconciliation_runs` | One matching run: `trigger_type`, status, counts; has `updated_at` (status changes) | — | account, import job (composite); triggered_by → users |
 | `audit_logs` | Append-only audit trail; scope none / workspace / workspace + account; `actor_user_id` NULL = system; before/after JSON without secrets or full rows | — | workspace; account (composite); actor → users |
@@ -153,7 +153,28 @@ self-references and cycles.
   READ COMMITTED), so two overlapping imports never both insert the same fingerprint.
 - **Supersession**: `superseded_by_entry_id` marks an entry replaced by a later entry of the same account
   (e.g. an estimate replaced by the final figure). Totals sum only rows where
-  `superseded_by_entry_id IS NULL`. The supersession logic itself is Milestone 5.
+  `superseded_by_entry_id IS NULL`. Nothing sets it yet: no real file shows how Meesho revises figures
+  (`is_estimate` is never set), so the supersession logic is deferred (M5 decision). Every M5 total,
+  exception list and match already excludes superseded rows, so a later milestone can add it safely.
+
+## Settlement ↔ order matching (Milestone 5)
+
+- **Match state** of an entry: `matched` when `order_id` is set; else `unmatched` when `sub_order_no` is
+  set; else `account_level` (ads, referral, … without a sub order: never an exception).
+- **Auto-match** (`reconciliation_runs.trigger_type` `import` inside every completed import's confirm
+  transaction, or `manual`): an entry with `sub_order_no` set, `order_id` NULL,
+  `superseded_by_entry_id` NULL and `auto_match_blocked = 0` gets the order of the same account with the
+  same `sub_order_no` (exact, both `utf8mb4_bin`): `order_id`, `match_method = 'auto'`, `matched_at`. It
+  never touches an existing match (manual or auto), so nothing is re-pointed. An `import` run only looks at
+  what its job can newly match: a settlement import at entries with its `import_job_id`, an orders import at
+  entries whose order has its `first_import_job_id` (indexes `ix_settlement_entries_account_import_job`,
+  `ix_orders_account_first_import_job`); a `manual` run checks the whole account.
+- **Manual match** (owner): `match_method = 'manual'`, `matched_by_user_id`, `matched_at`, and
+  `auto_match_blocked = 0`. **Manual unmatch** (owner): clears `order_id`, `match_method`, `matched_at`,
+  `matched_by_user_id` and sets `auto_match_blocked = 1`. The match CHECKs above hold in every state.
+- A run records `matched_count` (entries it matched) and, after matching, `unmatched_settlement_count`
+  (entries with a sub order, no order, not superseded) and `unmatched_order_count` (orders with no matched,
+  non-superseded entry).
 
 ## Effective-dated cost rule
 
@@ -295,6 +316,7 @@ erDiagram
     char entry_fingerprint "UK per account"
     smallint fingerprint_version
     bigint superseded_by_entry_id FK "nullable"
+    tinyint auto_match_blocked "M5, default 0"
   }
   expenses {
     bigint id PK

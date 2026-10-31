@@ -138,6 +138,13 @@ export class SettlementEntry extends Model<
   @Column({ type: DataType.BIGINT.UNSIGNED, allowNull: true })
   matchedByUserId!: CreationOptional<number | null>;
 
+  /**
+   * Set by a manual unmatch (M5): the automatic matcher skips the entry so it does not redo a match the
+   * owner removed. A manual match clears it.
+   */
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  autoMatchBlocked!: CreationOptional<boolean>;
+
   @CreatedAt
   @Column({ type: DataType.DATE(3), allowNull: false })
   createdAt!: CreationOptional<Date>;

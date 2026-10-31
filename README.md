@@ -18,7 +18,7 @@ and profit are never mixed up.
 | 2 | Database and tenancy: identity/workspace/account/import tables, domain tables | Done (14 tables, see [`api/db/SCHEMA.md`](api/db/SCHEMA.md)) |
 | 3 | Auth and workspace authorization (owner/member), cross-tenant denial tests | Done (sign-in, workspaces, seller accounts; see `api/README.md`) |
 | 4 | Import pipeline: CSV orders, XLSX settlements, preview, validation, idempotency, status history | Done (built on synthetic files; verify with real Meesho exports) |
-| 5 | Orders, settlements, reconciliation | Not started |
+| 5 | Orders, settlements, reconciliation | Done (matching by sub order no.; supersession deferred) |
 | 6 | Products, effective-dated costs, expenses | Not started |
 | 7 | Dashboard, account comparison, CSV reports | Not started |
 | 8 | UX hardening | Not started |
@@ -35,11 +35,18 @@ What works today:
   the preview (counts, recognised and ignored columns, sample rows, row-level errors), then confirm or discard it.
   Orders are upserted by sub-order number with a status history; settlement rows are stored once each. History of
   every upload per account, with an import detail page.
+- **Orders**: search, filter (status, order date, with/without a matched settlement), sort and page through each
+  account's orders; an order page shows its fields, full status history with the import each status came from, and
+  the settlement entries matched to it with the settled amount (as reported).
+- **Settlements & reconciliation**: every settlement entry with all reported amounts (TCS/TDS as their own columns)
+  and a total of the filtered entries; repeated transaction IDs stay separate rows. Entries are matched to orders by
+  sub order no. automatically after every import; the reconciliation tab shows matched / unmatched / account-level
+  counts and sums, unmatched entries (owners can match one to an order by hand), orders without a matched
+  settlement, and a log of matching runs. Owners can also unmatch an entry; automatic matching then leaves it alone.
 - `GET /api/v1/health` (API + database check), Swagger UI, and an Overview panel with live API/database status.
 
-Orders, settlements, products, expenses and reports screens are still placeholders that name their milestone; the
-imported data is in the database but not shown yet (Milestone 5). The database schema for all of them exists, with
-tenant isolation enforced by composite foreign keys.
+Products, expenses and reports screens are still placeholders that name their milestone. Amounts shown are as
+reported by Meesho: there is no profit, cost or bank-payout figure yet (Milestones 6 and 7).
 
 ## Architecture
 
@@ -47,12 +54,13 @@ tenant isolation enforced by composite foreign keys.
 meesho_saas/
   api/       NestJS 11 REST API under /api/v1 (TypeScript)
     src/       config/ (env validation), common/ (errors, logging, http), database/ (+ models/), health/,
-               auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/, imports/
+               auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/, imports/, orders/,
+               settlements/, reconciliation/
     db/        sequelize-cli: config.js, migrations/, seeders/ (CommonJS: the CLI cannot run TS), SCHEMA.md
     test/      e2e tests (supertest) and db/ schema tests, both against the real test database
   web/       Angular 21 standalone app + Tailwind CSS 4
     src/app/   core/ (API client, auth state + guards, workspaces, seller accounts, health, title), layout/shell,
-               features/ (auth, overview, seller-accounts, settings, imports), shared/
+               features/ (auth, overview, seller-accounts, settings, imports, orders, settlements), shared/
   scripts/   dev-mysql.ps1, an optional local MySQL helper for Windows
 ```
 
@@ -116,7 +124,7 @@ Cross-cutting pieces already in place in `api/`:
 4. **Install** (in `api/` and in `web/`): `npm ci`.
    If the drive holding npm's cache is full, point it elsewhere first, e.g. `set npm_config_cache=D:\npm-cache`.
 5. **Create the tables**: `npm run db:migrate` (development) in `api/`; the test scripts migrate the test database
-   themselves. `npm run db:migrate:status` should list 17 migrations as `up`.
+   themselves. `npm run db:migrate:status` should list 18 migrations as `up`.
 6. **Run**: `npm run start:dev` in `api/` (http://localhost:3100) and `npm start` in `web/` (http://localhost:4310,
    which proxies `/api` to the API).
 7. **First user**: set `AUTH_REGISTRATION_ENABLED=true` in `api/.env`, open http://localhost:4310, choose
@@ -158,7 +166,8 @@ Run from `api/`. Plain scripts use `.env` (or real environment variables when `N
 | `npm run db:migrate:undo` | Roll back the last migration (dev DB) |
 | `npm run db:migrate:undo:all` / `npm run db:test:migrate:undo:all` | Roll back every migration (refused when `NODE_ENV=production`) |
 
-There are 17 migrations (`api/db/migrations`): 15 create one table each, 2 add import columns. Every one has a tested `down`: `npm run test:db`
+There are 18 migrations (`api/db/migrations`): 15 create one table each, 2 add import columns, 1 adds the
+settlement "auto-match blocked" flag. Every one has a tested `down`: `npm run test:db`
 migrates an empty test database, rolls everything back and migrates again. Table design, keys, delete rules and the
 idempotency rules for orders, status history and settlements are documented in
 [`api/db/SCHEMA.md`](api/db/SCHEMA.md); conventions for new migrations are in `api/README.md`.
@@ -212,8 +221,11 @@ transaction writes orders, status events and settlement entries → summary. Not
 
 ## Limitations (current)
 
-- Imported orders and settlements are not shown or totalled yet (Milestones 5 to 7); orders are not linked to
-  products (Milestone 6) and settlements are not matched to orders (Milestone 5).
+- Orders are not linked to products or costs yet (Milestone 6), and there are no dashboards, profit figures or CSV
+  exports (Milestone 7). Settlement totals are plain sums of the reported amounts.
+- Settlement entries are matched to orders only by exact sub order no. Revised estimates are not detected yet
+  (supersession is deferred until real files show how Meesho revises them); totals already skip any entry marked as
+  superseded. Order statuses are kept exactly as reported (e.g. `DELIVERED` and `Delivered` are different values).
 - Member management (invite, change role, remove), password change and reset, signing out other sessions and email
   verification are not built yet. Registration reveals whether an email is already registered (409); it is off by
   default and rate-limited for that reason.

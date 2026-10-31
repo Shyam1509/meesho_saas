@@ -9,7 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet, isActive } from '@angular/router';
 
 import { describeApiError } from '../../core/api/api-error';
 import { AuthStateService } from '../../core/auth/auth-state.service';
@@ -25,7 +25,7 @@ import { NAV_ITEMS } from '../nav-items';
  */
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
   host: {
@@ -40,7 +40,26 @@ export class Shell {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly productName = PRODUCT_NAME;
-  protected readonly navItems = NAV_ITEMS;
+  /** The path (no query or fragment) of the page on screen. */
+  private readonly currentPath = computed(() => {
+    const url = this.router.lastSuccessfulNavigation()?.finalUrl;
+    return url ? this.router.serializeUrl(url).split(/[?#]/)[0] : '';
+  });
+  /**
+   * Each item with whether it is the current page: its link matches the URL the way
+   * `routerLinkActive` does by default (path prefix, query ignored), or the path matches the
+   * item's `alsoCurrentFor` (an order's page keeps "Orders" current).
+   */
+  protected readonly navItems = NAV_ITEMS.map((item) => {
+    const linkActive = isActive(item.link, this.router);
+    const extra = item.alsoCurrentFor;
+    return {
+      ...item,
+      current: computed(
+        () => linkActive() || (extra !== undefined && extra.test(this.currentPath())),
+      ),
+    };
+  });
   protected readonly navId = 'primary-navigation';
   protected readonly menuOpen = signal(false);
 

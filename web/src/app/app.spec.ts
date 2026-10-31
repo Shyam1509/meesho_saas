@@ -2,7 +2,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router, TitleStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
 
-import { ME_OWNER, importDetail } from '../testing/test-data';
+import { ME_OWNER, importDetail, orderDetail } from '../testing/test-data';
 import { App } from './app';
 import { routes } from './app.routes';
 import { provideApiHttpClient } from './core/api/provide-api-http-client';
@@ -30,10 +30,21 @@ describe('App', () => {
 
   afterEach(() => httpTesting.verify());
 
+  /**
+   * Answers the one request to `url` once the page has sent it. Lazy pages send their first
+   * request after the navigation settles, which can take longer than one stability check while
+   * the whole suite runs.
+   */
+  async function answerWhenSent(url: string, body: object): Promise<void> {
+    await vi.waitFor(() => httpTesting.expectOne(url).flush(body), { timeout: 10000 });
+  }
+
   it('renders the app shell for a signed-in user', async () => {
     auth.setSession(ME_OWNER);
     const fixture = TestBed.createComponent(App);
     await TestBed.inject(Router).navigateByUrl('/orders');
+    await fixture.whenStable();
+    await answerWhenSent('/api/v1/workspaces/10/accounts', { items: [] });
     await fixture.whenStable();
 
     const el = fixture.nativeElement as HTMLElement;
@@ -46,7 +57,8 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/');
-    httpTesting.expectOne('/api/v1/auth/config').flush({ registrationEnabled: true });
+    await fixture.whenStable();
+    await answerWhenSent('/api/v1/auth/config', { registrationEnabled: true });
     await fixture.whenStable();
 
     const el = fixture.nativeElement as HTMLElement;
@@ -64,7 +76,7 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await TestBed.inject(Router).navigateByUrl(url);
     await fixture.whenStable();
-    httpTesting.expectOne(request).flush({ items: [] });
+    await answerWhenSent(request, { items: [] });
     await fixture.whenStable();
 
     const el = fixture.nativeElement as HTMLElement;
@@ -72,13 +84,49 @@ describe('App', () => {
     expect(document.title).toBe(`${heading} · Meesho Seller SaaS`);
   });
 
+  it.each([
+    ['/orders', 'Orders'],
+    ['/settlements', 'Settlements & reconciliation'],
+  ])('%s shows the "%s" page inside the shell', async (url, heading) => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl(url);
+    await fixture.whenStable();
+    await answerWhenSent('/api/v1/workspaces/10/accounts', { items: [] });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe(heading);
+    expect(document.title).toBe(`${heading} · Meesho Seller SaaS`);
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe(heading);
+  });
+
+  it('/accounts/:accountId/orders/:orderId shows the order inside the shell, "Orders" current', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/accounts/100/orders/9001');
+    await fixture.whenStable();
+    expect(document.title).toBe('Order details · Meesho Seller SaaS');
+
+    await answerWhenSent('/api/v1/accounts/100/orders/9001', orderDetail());
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Order SO-1001');
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe('Orders');
+  });
+
   it('/imports shows the "Imports" page inside the shell', async () => {
     auth.setSession(ME_OWNER);
     const fixture = TestBed.createComponent(App);
     await TestBed.inject(Router).navigateByUrl('/imports');
     await fixture.whenStable();
-    httpTesting.expectOne('/api/v1/imports/config').flush({ maxFileMb: 10, maxRows: 50000 });
-    httpTesting.expectOne('/api/v1/workspaces/10/accounts').flush({ items: [] });
+    await answerWhenSent('/api/v1/imports/config', { maxFileMb: 10, maxRows: 50000 });
+    await answerWhenSent('/api/v1/workspaces/10/accounts', { items: [] });
     await fixture.whenStable();
 
     const el = fixture.nativeElement as HTMLElement;
@@ -93,7 +141,7 @@ describe('App', () => {
     await fixture.whenStable();
     expect(document.title).toBe('Import details · Meesho Seller SaaS');
 
-    httpTesting.expectOne('/api/v1/imports/500').flush(importDetail({ errorRows: 0 }));
+    await answerWhenSent('/api/v1/imports/500', importDetail({ errorRows: 0 }));
     await fixture.whenStable();
 
     const el = fixture.nativeElement as HTMLElement;

@@ -1,3 +1,5 @@
+import { PageQuery } from '../api/paged-response';
+
 /** The report formats the API can import (see the API's Meesho header profiles). */
 export type ImportReportType = 'orders_csv' | 'settlement_xlsx';
 
@@ -115,18 +117,8 @@ export interface ImportRow {
   values: Record<string, string | null>;
 }
 
-/** `{ items, page, pageSize, total }`, the API's paginated list shape. */
-export interface PagedResponse<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  total: number;
-}
-
-export interface PageQuery {
-  page?: number;
-  pageSize?: number;
-}
+// The paginated list shape is shared by every list endpoint; re-exported for existing imports.
+export type { PageQuery, PagedResponse } from '../api/paged-response';
 
 export interface ImportRowsQuery extends PageQuery {
   status?: ImportRowStatus;

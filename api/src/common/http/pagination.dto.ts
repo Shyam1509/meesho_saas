@@ -4,8 +4,12 @@ import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
-/** Upper bound for `page`, so offsets stay small integers. */
-export const MAX_PAGE = 100_000;
+/**
+ * Upper bound for `page` on EVERY list endpoint (400 above): deep OFFSET pages make MySQL read and discard
+ * every earlier row. 2000 x 100 = 200 000 rows, above the 50 000-row import cap (at the default page size of
+ * 20, staged rows past 40 000 need pageSize >= 25).
+ */
+export const MAX_PAGE = 2000;
 
 /**
  * `?page=&pageSize=` query of list endpoints. Unknown query parameters are rejected by the global

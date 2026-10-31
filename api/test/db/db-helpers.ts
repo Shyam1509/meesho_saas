@@ -68,6 +68,7 @@ export const MIGRATIONS = [
   '20261030000015-create-user-sessions.js',
   '20261030000016-add-import-jobs-data-as-of-and-preview.js',
   '20261030000017-add-import-jobs-history-only-count.js',
+  '20261031000018-add-settlement-entries-auto-match-blocked.js',
 ] as const;
 
 /**

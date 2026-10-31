@@ -14,142 +14,85 @@
   }
 </div>
 
-@let state = accounts();
-<div
+<app-seller-account-picker
   class="mt-6"
-  [attr.aria-busy]="state.kind === 'loading'"
-  [attr.data-accounts-state]="state.kind"
->
-  @if (state.kind === 'loading') {
-    <p role="status" class="text-sm text-slate-700">Loading seller accounts…</p>
-  } @else if (state.kind === 'no-workspace') {
-    <p class="text-sm text-slate-700">
-      You are not a member of any workspace yet, so there is nothing to import into.
-    </p>
-  } @else if (state.kind === 'error') {
-    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-      <p class="font-medium text-red-800">The seller accounts could not be loaded.</p>
-      <p class="mt-1 text-red-800">{{ state.message }}</p>
-      <button
-        type="button"
-        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        (click)="retryAccounts()"
-      >
-        Try again
-      </button>
-    </div>
-  } @else if (state.accounts.length === 0) {
-    <div
-      class="max-w-2xl rounded-lg border border-dashed border-slate-300 bg-white p-6"
-      data-testid="no-accounts"
+  inputId="imports-account"
+  purpose="Every import belongs to a seller account."
+  noWorkspaceText="You are not a member of any workspace yet, so there is nothing to import into."
+  (accountChange)="onAccountChange()"
+/>
+
+@if (selectedAccount(); as account) {
+  <section
+    aria-labelledby="imports-upload-heading"
+    class="mt-6 max-w-3xl rounded-lg border border-slate-200 bg-white p-5"
+  >
+    <h2
+      #uploadHeading
+      id="imports-upload-heading"
+      tabindex="-1"
+      class="text-base font-semibold text-slate-900 focus-visible:outline-none"
     >
-      <p class="text-sm font-medium text-slate-900">No active seller accounts.</p>
-      <p class="mt-1 text-sm text-slate-600">
-        Every import belongs to a seller account.
-        @if (isOwner()) {
-          Add one (or re-enable a disabled one) first.
-        } @else {
-          Ask an owner of this workspace to add one.
-        }
+      Upload a report
+    </h2>
+    <p class="mt-1 text-sm text-slate-600">For {{ account.displayName }}.</p>
+    <app-import-upload-form
+      class="mt-4"
+      [pending]="uploading() !== null"
+      [maxFileMb]="maxFileMb()"
+      [maxRows]="limits()?.maxRows ?? null"
+      (submitted)="upload($event)"
+    />
+    @if (uploading(); as fileName) {
+      <p role="status" class="mt-3 text-sm text-slate-700" data-testid="uploading">
+        Uploading and checking {{ fileName }}…
       </p>
-      <a
-        routerLink="/seller-accounts"
-        class="mt-3 inline-block rounded-sm text-sm font-medium text-accent-700 underline hover:text-accent-800"
-      >
-        Go to Seller accounts
-      </a>
-    </div>
-  } @else {
-    <div class="max-w-sm">
-      <label for="imports-account" class="block text-sm font-medium text-slate-800">
-        Seller account
-      </label>
-      <select
-        id="imports-account"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
-        (change)="selectAccount($event)"
-      >
-        @for (account of state.accounts; track account.id) {
-          <option [value]="account.id" [selected]="account.id === selectedAccountId()">
-            {{ account.displayName }}
-          </option>
-        }
-      </select>
-    </div>
-
-    @if (selectedAccount(); as account) {
-      <section
-        aria-labelledby="imports-upload-heading"
-        class="mt-6 max-w-3xl rounded-lg border border-slate-200 bg-white p-5"
-      >
-        <h2
-          #uploadHeading
-          id="imports-upload-heading"
-          tabindex="-1"
-          class="text-base font-semibold text-slate-900 focus-visible:outline-none"
-        >
-          Upload a report
-        </h2>
-        <p class="mt-1 text-sm text-slate-600">For {{ account.displayName }}.</p>
-        <app-import-upload-form
-          class="mt-4"
-          [pending]="uploading() !== null"
-          [maxFileMb]="maxFileMb()"
-          [maxRows]="limits()?.maxRows ?? null"
-          (submitted)="upload($event)"
-        />
-        @if (uploading(); as fileName) {
-          <p role="status" class="mt-3 text-sm text-slate-700" data-testid="uploading">
-            Uploading and checking {{ fileName }}…
-          </p>
-        }
-        @if (uploadFailure(); as failure) {
-          <app-validation-summary
-            class="mt-4"
-            [heading]="failure.heading"
-            [message]="failure.message"
-            [details]="failure.error.details"
-            [labelFor]="fieldLabel"
-          />
-        }
-      </section>
-
-      @if (result(); as done) {
-        <app-import-result class="mt-6 max-w-3xl" [job]="done" />
-      }
-
-      @if (current(); as job) {
-        <section
-          aria-labelledby="imports-preview-heading"
-          class="mt-8"
-          data-testid="preview"
-        >
-          <div class="flex flex-wrap items-center gap-3">
-            <h2
-              #previewHeading
-              id="imports-preview-heading"
-              tabindex="-1"
-              class="text-lg font-semibold break-all text-slate-900 focus-visible:outline-none"
-            >
-              Preview: {{ job.originalFilename }}
-            </h2>
-            <app-import-status-badge [status]="job.status" />
-          </div>
-          <app-import-review class="mt-4" [job]="job" />
-          <app-import-actions class="mt-6 max-w-3xl" [job]="job" (updated)="onJobUpdated($event)" />
-        </section>
-      }
-
-      <section aria-labelledby="imports-history-heading" class="mt-10">
-        <h2 id="imports-history-heading" class="text-lg font-semibold text-slate-900">
-          Import history
-        </h2>
-        <app-import-history
-          class="mt-3"
-          [accountId]="account.id"
-          [accountName]="account.displayName"
-        />
-      </section>
     }
+    @if (uploadFailure(); as failure) {
+      <app-validation-summary
+        class="mt-4"
+        [heading]="failure.heading"
+        [message]="failure.message"
+        [details]="failure.error.details"
+        [labelFor]="fieldLabel"
+      />
+    }
+  </section>
+
+  @if (result(); as done) {
+    <app-import-result class="mt-6 max-w-3xl" [job]="done" />
   }
-</div>
+
+  @if (current(); as job) {
+    <section
+      aria-labelledby="imports-preview-heading"
+      class="mt-8"
+      data-testid="preview"
+    >
+      <div class="flex flex-wrap items-center gap-3">
+        <h2
+          #previewHeading
+          id="imports-preview-heading"
+          tabindex="-1"
+          class="text-lg font-semibold break-all text-slate-900 focus-visible:outline-none"
+        >
+          Preview: {{ job.originalFilename }}
+        </h2>
+        <app-import-status-badge [status]="job.status" />
+      </div>
+      <app-import-review class="mt-4" [job]="job" />
+      <app-import-actions class="mt-6 max-w-3xl" [job]="job" (updated)="onJobUpdated($event)" />
+    </section>
+  }
+
+  <section aria-labelledby="imports-history-heading" class="mt-10">
+    <h2 id="imports-history-heading" class="text-lg font-semibold text-slate-900">
+      Import history
+    </h2>
+    <app-import-history
+      class="mt-3"
+      [accountId]="account.id"
+      [accountName]="account.displayName"
+    />
+  </section>
+}
