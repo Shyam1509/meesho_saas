@@ -103,6 +103,34 @@ export const ORDER_COST_COLUMNS = `o.product_id AS productId, pc.unit_cost AS co
 export const PRODUCT_COST_STATES = ['known', 'unknown', 'no_product'] as const;
 export type ProductCostState = (typeof PRODUCT_COST_STATES)[number];
 
+/**
+ * M7 aggregates (dashboard) need the same rule in SQL (with ORDER_COST_JOIN): the exact line total
+ * (NULL unless the cost is known, so SUM adds known costs only) and the state, with exactly the precedence
+ * of toOrderProductCost below (no product → no_product; no cost row on the order date → unknown).
+ */
+export const ORDER_COST_TOTAL_SQL = 'pc.unit_cost * o.quantity';
+export const ORDER_COST_STATE_SQL = `(CASE WHEN o.product_id IS NULL THEN 'no_product'
+            WHEN pc.unit_cost IS NULL THEN 'unknown' ELSE 'known' END)`;
+
+/**
+ * The same rule as ORDER_COST_JOIN for aggregates over many orders (M7 dashboard): the scope's cost rows
+ * become ranges [effective_from, next effective_from) once per query (LEAD over each product's rows, ordered
+ * by date), and each order joins the one range containing its order date. Since `effective_from` is unique per
+ * product, that range is exactly the row with the greatest `effective_from <= order_date` (no row → the
+ * joined columns are NULL → unknown), so ORDER_COST_TOTAL_SQL / ORDER_COST_STATE_SQL work unchanged (alias
+ * `pc`). ORDER_COST_JOIN instead runs a MAX() subquery per order: fine for a page, ~0.7 s for 20k orders.
+ * `productScopeSql` restricts `products hp` to the scope (our own fragment, e.g. hp.seller_account_id = …).
+ */
+export function orderCostRangesJoin(productScopeSql: string): string {
+  return `LEFT JOIN (SELECT h.product_id, h.unit_cost, h.effective_from,
+                 LEAD(h.effective_from) OVER (PARTITION BY h.product_id ORDER BY h.effective_from) AS next_from
+          FROM products hp
+          JOIN product_cost_history h ON h.product_id = hp.id
+          WHERE ${productScopeSql}) pc
+         ON pc.product_id = o.product_id AND pc.effective_from <= o.order_date
+        AND (pc.next_from IS NULL OR o.order_date < pc.next_from)`;
+}
+
 /** The raw ORDER_COST_COLUMNS of one order row. */
 export interface OrderCostRow {
   productId: number | string | null;

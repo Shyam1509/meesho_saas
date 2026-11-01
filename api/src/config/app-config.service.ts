@@ -89,6 +89,24 @@ export class AppConfigService {
     return this.config.get('IMPORT_MAX_ROWS', { infer: true });
   }
 
+  /** Most rows per CSV export (M7); a larger export is refused with 422 before any row is sent. */
+  get reportMaxRows(): number {
+    return this.config.get('REPORT_MAX_ROWS', { infer: true });
+  }
+
+  /**
+   * CSV exports streaming at the same time in this process (M7; fixed, not an env variable: each holds one
+   * pooled connection of 5). More → 429. Tests pin it through the e2e config overrides.
+   */
+  get reportMaxConcurrentExports(): number {
+    return 2;
+  }
+
+  /** A CSV export whose client accepts no data for this long is cut off (M7; fixed, tests pin it). */
+  get reportStallTimeoutMs(): number {
+    return 60_000;
+  }
+
   /** Effective logger level: always silent under test. */
   get logLevel(): LogLevel {
     return this.isTest

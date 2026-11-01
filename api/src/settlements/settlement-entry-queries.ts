@@ -12,6 +12,8 @@ import {
   type AccountScope,
   type SqlFilter,
 } from '../common/sql/account-scope';
+import type { DateBasis } from '../common/http/date-basis';
+import { statusInSql } from '../orders/order-queries';
 import { idOrNull, moneyOrNull, toBool, toCount } from '../common/sql/values';
 import type {
   SettlementEntryType,
@@ -113,6 +115,112 @@ export const MATCH_STATE_SQL: Readonly<Record<SettlementMatchState, string>> = {
 };
 
 export const NOT_SUPERSEDED_SQL = 'se.superseded_by_entry_id IS NULL';
+
+/** Entries of every seller account of a workspace (id from requireWorkspace): the M7 workspace dashboard. */
+export function workspaceEntryScope(workspaceId: number): SqlFilter {
+  return {
+    conditions: ['se.workspace_id = :workspaceId'],
+    replacements: { workspaceId },
+  };
+}
+
+/**
+ * The date of an entry in the ORDER-date basis (Milestone 7): matched → the matched order's order date
+ * (COALESCE with the entry's own order date, which a matched order never needs: the order's date wins);
+ * unmatched → the entry's own order date (NULL when the workbook row has none); account-level (no sub order:
+ * ads, referral, …) → its payment date, because it has no order date at all. NULL = no date in this basis.
+ * Needs ENTRY_ORDER_JOIN (alias `mo`) in the query; filters use orderBasisRangeSql / entryUndatedSql (the
+ * same rule, without the join).
+ */
+export const ENTRY_ORDER_BASIS_DATE_SQL = `(CASE WHEN ${MATCH_STATE_SQL.account_level} THEN se.payment_date
+            ELSE COALESCE(mo.order_date, se.order_date) END)`;
+
+/** The matched order of an entry (one row at most: the composite key), for ENTRY_ORDER_BASIS_DATE_SQL. */
+export const ENTRY_ORDER_JOIN = `LEFT JOIN orders mo
+         ON mo.seller_account_id = se.seller_account_id AND mo.id = se.order_id`;
+
+/** The date that places an entry in a range (SELECT form; the order basis needs entryBasisJoin). */
+export function entryBasisDateSql(basis: DateBasis): string {
+  return basis === 'payment_date'
+    ? 'se.payment_date'
+    : ENTRY_ORDER_BASIS_DATE_SQL;
+}
+
+/** The join entryBasisDateSql needs ('' for the payment basis). */
+export function entryBasisJoin(basis: DateBasis): string {
+  return basis === 'payment_date' ? '' : ENTRY_ORDER_JOIN;
+}
+
+function bounds(column: string, range: { from?: string; to?: string }): string {
+  return [
+    range.from ? `${column} >= :from` : null,
+    range.to ? `${column} <= :to` : null,
+  ]
+    .filter((c): c is string => c !== null)
+    .join(' AND ');
+}
+
+/**
+ * ENTRY_ORDER_BASIS_DATE_SQL in range, as one index-friendly condition with a branch per match state:
+ * matched → its order is one of the scope's orders dated in range (a NON-correlated subquery on
+ * ix_orders_account_order_date, read once per query) — optionally only orders with one of `:statuses`;
+ * unmatched → its own order date in range; account-level → its payment date in range.
+ * `accountScoped`: the filter binds :sellerAccountId (else :workspaceId).
+ */
+export function orderBasisRangeSql(
+  range: { from?: string; to?: string },
+  accountScoped: boolean,
+  withStatuses = false,
+): string {
+  const orders = accountScoped
+    ? 'bo.seller_account_id = :sellerAccountId'
+    : 'bo.workspace_id = :workspaceId';
+  const status = withStatuses ? ` AND ${statusInSql('bo')}` : '';
+  return `((${MATCH_STATE_SQL.matched} AND (se.seller_account_id, se.order_id) IN (
+              SELECT bo.seller_account_id, bo.id FROM orders bo
+              WHERE ${orders} AND ${bounds('bo.order_date', range)}${status}))
+          OR (${MATCH_STATE_SQL.unmatched} AND ${bounds('se.order_date', range)})
+          OR (${MATCH_STATE_SQL.account_level} AND ${bounds('se.payment_date', range)}))`;
+}
+
+/**
+ * "The entry has no date in this basis": payment basis → no payment date; order basis → an unmatched entry
+ * without its own order date or an account-level entry without a payment date (a matched order always has
+ * an order date). Exactly ENTRY_ORDER_BASIS_DATE_SQL IS NULL, without the join.
+ */
+export function entryUndatedSql(basis: DateBasis): string {
+  return basis === 'payment_date'
+    ? 'se.payment_date IS NULL'
+    : `((${MATCH_STATE_SQL.unmatched} AND se.order_date IS NULL)
+          OR (${MATCH_STATE_SQL.account_level} AND se.payment_date IS NULL))`;
+}
+
+/**
+ * `from` / `to` (inclusive) on the entry's basis date. The settlements list (`dateBasis`), its CSV and the
+ * dashboard all filter through this, so their totals come from the same SQL. An entry without a date in
+ * the basis never matches a range. `statuses` (dashboard, order basis only): matched entries only of
+ * orders with one of these raw statuses; unmatched / account-level entries have no order status and stay.
+ */
+export function addEntryDateRange(
+  filter: SqlFilter,
+  basis: DateBasis,
+  range: { from?: string; to?: string },
+  statuses: readonly string[] = [],
+): void {
+  if (!range.from && !range.to) return;
+  if (range.from) filter.replacements.from = range.from;
+  if (range.to) filter.replacements.to = range.to;
+  if (basis === 'payment_date') {
+    if (range.from) filter.conditions.push('se.payment_date >= :from');
+    if (range.to) filter.conditions.push('se.payment_date <= :to');
+    return;
+  }
+  const accountScoped = filter.replacements.sellerAccountId !== undefined;
+  filter.conditions.push(
+    orderBasisRangeSql(range, accountScoped, statuses.length > 0),
+  );
+  if (statuses.length > 0) filter.replacements.statuses = [...statuses];
+}
 
 export function matchState(
   orderId: unknown,

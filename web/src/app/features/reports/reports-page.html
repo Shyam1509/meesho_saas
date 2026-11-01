@@ -1,0 +1,221 @@
+<h1 class="text-2xl font-semibold tracking-tight text-slate-900">Reports</h1>
+<p class="mt-2 max-w-3xl text-sm text-slate-600">
+  Download your data as CSV files (UTF-8, opens in Excel or Google Sheets), with the same filters as
+  the lists. Amounts are plain numbers as reported by Meesho — no ₹ sign or grouping — and a
+  missing value is an empty cell, never 0. A file holds at most {{ maxRows }} rows; narrow the
+  filters for more.
+</p>
+<p class="mt-2 max-w-3xl text-sm font-medium text-slate-700">{{ asReportedNote }}</p>
+
+<app-seller-account-picker
+  class="mt-6"
+  inputId="reports-account"
+  purpose="Orders and settlements are exported per seller account."
+  noWorkspaceText="You are not a member of any workspace yet, so there is nothing to export."
+/>
+
+@if (workspace()) {
+  <div class="mt-6 grid gap-6 xl:grid-cols-3">
+    <app-export-card
+      cardId="export-orders"
+      heading="Orders"
+      [description]="
+        account()
+          ? 'Orders of ' + account()?.displayName + ', with status, settled amount and product cost.'
+          : 'Choose a seller account above.'
+      "
+      [columns]="orderColumns"
+      [state]="ordersDownload()"
+      [disabled]="!account()"
+      (download)="downloadOrders()"
+    >
+      <fieldset>
+        <legend class="text-sm font-medium text-slate-800">Dates are</legend>
+        <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+          <div class="flex items-center gap-1.5">
+            <input
+              id="export-orders-basis-order"
+              type="radio"
+              name="export-orders-basis"
+              value="order_date"
+              class="size-4 border-slate-300"
+              [checked]="ordersBasis() === 'order_date'"
+              (change)="setOrdersBasis($event)"
+            />
+            <label for="export-orders-basis-order" class="text-sm text-slate-800">Order date</label>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input
+              id="export-orders-basis-payment"
+              type="radio"
+              name="export-orders-basis"
+              value="payment_date"
+              class="size-4 border-slate-300"
+              [checked]="ordersBasis() === 'payment_date'"
+              (change)="setOrdersBasis($event)"
+            />
+            <label for="export-orders-basis-payment" class="text-sm text-slate-800">
+              First settlement payment date
+            </label>
+          </div>
+        </div>
+      </fieldset>
+      <app-date-range
+        #ordersRange
+        [legend]="ordersBasis() === 'order_date' ? 'Order date' : 'Payment date'"
+        idPrefix="export-orders-date"
+        [(from)]="ordersFrom"
+        [(to)]="ordersTo"
+      />
+      <app-checkbox-group
+        legend="Status"
+        idPrefix="export-orders-status"
+        [options]="options(statuses())"
+        [emptyText]="statusEmptyText()"
+        [(selected)]="ordersStatus"
+      />
+      <div>
+        <label for="export-orders-settlement" class="block text-sm font-medium text-slate-800">
+          Settlement
+        </label>
+        <select
+          id="export-orders-settlement"
+          class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          (change)="setOrdersSettlement($event)"
+        >
+          <option value="" [selected]="ordersSettlement() === ''">All orders</option>
+          <option value="matched" [selected]="ordersSettlement() === 'matched'">
+            With a matched settlement
+          </option>
+          <option value="unmatched" [selected]="ordersSettlement() === 'unmatched'">
+            Without a matched settlement
+          </option>
+        </select>
+      </div>
+    </app-export-card>
+
+    <app-export-card
+      cardId="export-settlements"
+      heading="Settlements"
+      [description]="
+        account()
+          ? 'Settlement entries of ' + account()?.displayName + ', every amount as reported, with the match state.'
+          : 'Choose a seller account above.'
+      "
+      [columns]="settlementColumns"
+      [state]="settlementsDownload()"
+      [disabled]="!account()"
+      (download)="downloadSettlements()"
+    >
+      <div>
+        <label for="export-settlements-basis" class="block text-sm font-medium text-slate-800">
+          Dates are
+        </label>
+        <select
+          id="export-settlements-basis"
+          class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          (change)="setSettlementsBasis($event)"
+        >
+          <option value="payment_date" [selected]="settlementsBasis() === 'payment_date'">
+            Payment date
+          </option>
+          <option value="order_date" [selected]="settlementsBasis() === 'order_date'">
+            Order date (matched order’s, else the entry’s)
+          </option>
+        </select>
+      </div>
+      <app-date-range
+        #settlementsRange
+        [legend]="settlementsBasis() === 'order_date' ? 'Order date' : 'Payment date'"
+        idPrefix="export-settlements-date"
+        [(from)]="settlementsFrom"
+        [(to)]="settlementsTo"
+      />
+      <app-checkbox-group
+        legend="Entry type"
+        idPrefix="export-settlements-type"
+        [options]="entryTypeOptions"
+        [(selected)]="settlementsTypes"
+      />
+      <div>
+        <label for="export-settlements-match" class="block text-sm font-medium text-slate-800">
+          Match
+        </label>
+        <select
+          id="export-settlements-match"
+          class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          (change)="setSettlementsMatch($event)"
+        >
+          <option value="" [selected]="settlementsMatch() === ''">All entries</option>
+          <option value="matched" [selected]="settlementsMatch() === 'matched'">
+            Matched to an order
+          </option>
+          <option value="unmatched" [selected]="settlementsMatch() === 'unmatched'">
+            Unmatched (has a sub order no.)
+          </option>
+          <option value="account_level" [selected]="settlementsMatch() === 'account_level'">
+            Account-level (no sub order no.)
+          </option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <input
+          id="export-settlements-superseded"
+          type="checkbox"
+          class="size-4 rounded border-slate-300"
+          [checked]="settlementsSuperseded()"
+          (change)="setSettlementsSuperseded($event)"
+        />
+        <label for="export-settlements-superseded" class="text-sm text-slate-800">
+          Include superseded entries
+        </label>
+      </div>
+    </app-export-card>
+
+    <app-export-card
+      cardId="export-expenses"
+      heading="Expenses"
+      description="Business costs you entered, outside Meesho’s reports."
+      [columns]="expenseColumns"
+      [state]="expensesDownload()"
+      [disabled]="expensesNeedAccount() && !account()"
+      (download)="downloadExpenses()"
+    >
+      <div>
+        <label for="export-expenses-scope" class="block text-sm font-medium text-slate-800">
+          Whose expenses
+        </label>
+        <select
+          id="export-expenses-scope"
+          class="mt-1 block w-full max-w-xs rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          (change)="setExpensesScope($event)"
+        >
+          <option value="account" [selected]="expensesScope() === 'account'">
+            {{ account() ? account()?.displayName : 'The selected seller account' }}
+          </option>
+          <option value="workspace" [selected]="expensesScope() === 'workspace'">
+            Workspace-wide only
+          </option>
+          <option value="all" [selected]="expensesScope() === 'all'">
+            Workspace-wide and every seller account’s
+          </option>
+        </select>
+      </div>
+      <app-date-range
+        #expensesRange
+        legend="Expense date"
+        idPrefix="export-expenses-date"
+        [(from)]="expensesFrom"
+        [(to)]="expensesTo"
+      />
+      <app-checkbox-group
+        legend="Category"
+        idPrefix="export-expenses-category"
+        [options]="options(categories())"
+        [emptyText]="categoryEmptyText()"
+        [(selected)]="expensesCategories"
+      />
+      <p class="text-xs text-slate-600">{{ doubleCountingNote }}</p>
+    </app-export-card>
+  </div>
+}

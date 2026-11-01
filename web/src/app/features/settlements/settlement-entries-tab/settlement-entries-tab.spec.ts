@@ -169,6 +169,35 @@ describe('SettlementEntriesTab (Settlements page, Entries tab)', () => {
       req.flush(settlementList([]));
     });
 
+    it('filters by order date with dateBasis=order_date (dashboard links), and back to payment date', async () => {
+      await render('/settlements?from=2026-10-01&to=2026-10-31&dateBasis=order_date&match=unmatched');
+      const req = expectEntries();
+      expect(req.request.params.get('dateBasis')).toBe('order_date');
+      expect(req.request.params.get('from')).toBe('2026-10-01');
+      req.flush(settlementList([]));
+      await stable();
+      const basis = host().querySelector('#entries-date-basis') as HTMLSelectElement;
+      expect(basis.value).toBe('order_date');
+      expect(textOf(host().querySelector('app-date-range legend'))).toBe('Order date');
+
+      setValue(basis, 'payment_date');
+      await stable();
+      expect(textOf(host().querySelector('app-date-range legend'))).toBe('Payment date');
+      buttonByText('Apply filters')?.click();
+      await stable();
+      expect(url()).toBe('/settlements?from=2026-10-01&to=2026-10-31&match=unmatched');
+      const next = expectEntries();
+      expect(next.request.params.has('dateBasis')).toBe(false);
+      next.flush(settlementList([]));
+    });
+
+    it('ignores an unknown dateBasis', async () => {
+      await render('/settlements?dateBasis=bogus');
+      const req = expectEntries();
+      expect(req.request.params.has('dateBasis')).toBe(false);
+      req.flush(settlementList([]));
+    });
+
     it('applies the filters to the URL, keeping the selected tab param', async () => {
       await render('/settlements?page=2');
       await flushEntries(undefined, undefined, 2, 30);

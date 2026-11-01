@@ -1,0 +1,232 @@
+@let d = dashboard();
+@let t = totals();
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+  <table class="min-w-full text-sm" data-testid="comparison-table">
+    <caption class="sr-only">
+      Seller accounts compared, sortable by every column
+    </caption>
+    <thead class="bg-slate-50">
+      <tr class="text-left">
+        <th scope="col" class="px-3 py-2" [attr.aria-sort]="ariaSort(sort(), 'displayName')">
+          <app-sort-button
+            key="displayName"
+            label="Seller account"
+            [sort]="sort()"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+        <th scope="col" class="px-3 py-2 text-right" [attr.aria-sort]="ariaSort(sort(), 'orders')">
+          <app-sort-button
+            key="orders"
+            label="Orders"
+            [sort]="sort()"
+            [firstDescending]="true"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+        <th
+          scope="col"
+          class="px-3 py-2 text-right"
+          [attr.aria-sort]="ariaSort(sort(), 'orderValueDiscounted')"
+        >
+          <app-sort-button
+            key="orderValueDiscounted"
+            label="Order value (as reported)"
+            [sort]="sort()"
+            [firstDescending]="true"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+        <th
+          scope="col"
+          class="px-3 py-2 text-right"
+          [attr.aria-sort]="ariaSort(sort(), 'settlementAmount')"
+        >
+          <app-sort-button
+            key="settlementAmount"
+            label="Settlement amount (as reported)"
+            [sort]="sort()"
+            [firstDescending]="true"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+        <th
+          scope="col"
+          class="px-3 py-2 text-right"
+          [attr.aria-sort]="ariaSort(sort(), 'productCostKnown')"
+        >
+          <app-sort-button
+            key="productCostKnown"
+            label="Product cost (known)"
+            [sort]="sort()"
+            [firstDescending]="true"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+        <th scope="col" class="px-3 py-2 text-right" [attr.aria-sort]="ariaSort(sort(), 'expenses')">
+          <app-sort-button
+            key="expenses"
+            label="Expenses"
+            [sort]="sort()"
+            [firstDescending]="true"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+        <th
+          scope="col"
+          class="px-3 py-2 text-right"
+          [attr.aria-sort]="ariaSort(sort(), 'contribution')"
+        >
+          <app-sort-button
+            key="contribution"
+            label="Estimated contribution"
+            [sort]="sort()"
+            [firstDescending]="true"
+            (sortChange)="changeSort($event)"
+          />
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (row of rows(); track row.id) {
+        <tr class="border-t border-slate-100" [attr.data-account]="row.id">
+          <th scope="row" class="px-3 py-2 text-left font-normal">
+            <span class="font-medium text-slate-900">{{ row.displayName }}</span>
+            @if (row.status !== 'active') {
+              <span
+                class="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"
+                data-testid="disabled-badge"
+                >Disabled</span
+              >
+            }
+            @if (linkable(row)) {
+              <a
+                class="ml-2 rounded-sm text-xs text-accent-700 underline hover:text-accent-800"
+                routerLink="/overview"
+                [queryParams]="accountDashboardParams()"
+                (click)="openDashboard(row)"
+                >Dashboard<span class="sr-only"> of {{ row.displayName }}</span></a
+              >
+            }
+          </th>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="orders">
+            <app-drill-link [link]="ordersLink(row)" [description]="'orders of ' + row.displayName">{{
+              row.orders | count
+            }}</app-drill-link>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="orderValueDiscounted">
+            <app-drill-link [link]="ordersLink(row)" [description]="'orders of ' + row.displayName"
+              ><app-amount [value]="row.orderValueDiscounted"
+            /></app-drill-link>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="settlementAmount">
+            <app-drill-link
+              [link]="settlementsLink(row)"
+              [description]="'settlement entries of ' + row.displayName"
+              ><app-amount [value]="row.settlementAmount"
+            /></app-drill-link>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="productCostKnown">
+            <app-drill-link
+              [link]="productCostLink(row)"
+              [description]="'orders of ' + row.displayName + ', each with its cost'"
+              ><app-amount [value]="row.productCostKnown"
+            /></app-drill-link>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="expenses">
+            <app-drill-link
+              [link]="expensesLink(row)"
+              [description]="'expenses of ' + row.displayName"
+              ><app-amount [value]="row.expenses"
+            /></app-drill-link>
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="contribution">
+            <app-amount [value]="row.contribution" />
+            @if (!row.complete) {
+              <span
+                class="block text-xs font-medium text-amber-800"
+                data-testid="row-incomplete"
+                [attr.title]="
+                  row.cancelledOrReturnedOrders > 0
+                    ? row.cancelledOrReturnedOrders +
+                      ' cancelled/RTO/returned: their product cost is still deducted'
+                    : null
+                "
+                >Incomplete</span
+              >
+            }
+            @if (row.cancelledOrReturnedOrders > 0) {
+              <span class="block text-xs text-amber-800" data-testid="row-cancelled"
+                >{{ row.cancelledOrReturnedOrders | count }} cancelled/RTO/returned (cost still
+                deducted)</span
+              >
+            }
+          </td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="7" class="px-3 py-3 text-slate-600">This workspace has no seller accounts.</td>
+        </tr>
+      }
+    </tbody>
+    <tfoot class="border-t-2 border-slate-200">
+      <tr class="font-semibold text-slate-900" data-testid="totals-row">
+        <th scope="row" class="px-3 py-2 text-left">Total of accounts</th>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="orders">{{ t.orders | count }}</td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="orderValueDiscounted">
+          <app-amount [value]="t.orderValueDiscounted" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="settlementAmount">
+          <app-amount [value]="t.settlementAmount" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="productCostKnown">
+          <app-amount [value]="t.productCostKnown" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="expenses">
+          <app-amount [value]="t.expenses" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="contribution">
+          <app-amount [value]="t.contribution" />
+        </td>
+      </tr>
+      @if (workspaceExpenses() !== null) {
+        <tr class="text-slate-700" data-testid="workspace-expenses-row">
+          <th scope="row" class="px-3 py-2 text-left font-normal">Workspace-wide expenses</th>
+          <td colspan="4"></td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="expenses">
+            <app-amount [value]="workspaceExpenses()" />
+          </td>
+          <td class="px-3 py-2 text-right tabular-nums" data-col="contribution">
+            <app-amount [value]="workspaceExpensesNegated()" />
+          </td>
+        </tr>
+      }
+      <tr class="border-t border-slate-200 font-semibold text-slate-900" data-testid="workspace-row">
+        <th scope="row" class="px-3 py-2 text-left">Workspace total (the cards above)</th>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="orders">
+          {{ d.orders.count | count }}
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="orderValueDiscounted">
+          <app-amount [value]="d.orders.orderValueDiscounted" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="settlementAmount">
+          <app-amount [value]="d.settlements.amount" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="productCostKnown">
+          <app-amount [value]="d.productCost.known" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="expenses">
+          <app-amount [value]="d.expenses.amount" />
+        </td>
+        <td class="px-3 py-2 text-right tabular-nums" data-col="contribution">
+          <app-amount [value]="d.contribution.amount" />
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+<p class="mt-2 max-w-3xl text-xs text-slate-600">
+  Workspace-wide expenses belong to no account, so they appear only in the workspace total. Each
+  account’s product cost is rounded to the paisa, so the total of accounts can differ from the
+  workspace total by a few paise. A disabled account’s lists open once it is enabled again.
+</p>

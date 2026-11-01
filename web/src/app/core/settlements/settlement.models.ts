@@ -105,15 +105,27 @@ export const SETTLEMENT_SORTS: readonly SettlementSort[] = [
 
 export const DEFAULT_SETTLEMENT_SORT: SettlementSort = '-paymentDate';
 
+/**
+ * What a settlements list's `from` / `to` filter on. `payment_date` (the API's default): the
+ * entry's payment date. `order_date`: the matched order's order date, else the entry's own.
+ */
+export type SettlementDateBasis = 'payment_date' | 'order_date';
+
+export const SETTLEMENT_DATE_BASES: readonly SettlementDateBasis[] = ['payment_date', 'order_date'];
+
+export const DEFAULT_SETTLEMENT_DATE_BASIS: SettlementDateBasis = 'payment_date';
+
 /** Query of `GET /accounts/:accountId/settlements`. Only the given values are sent. */
 export interface SettlementListQuery extends PageQuery {
   sort?: SettlementSort;
   /** Sent as a repeated `entryType` parameter. */
   entryType?: readonly string[];
-  /** Payment date from, `YYYY-MM-DD` (inclusive). */
+  /** Date from, `YYYY-MM-DD` (inclusive): the payment date unless `dateBasis` says otherwise. */
   from?: string;
-  /** Payment date to, `YYYY-MM-DD` (inclusive). */
+  /** Date to, `YYYY-MM-DD` (inclusive). */
   to?: string;
+  /** Leave out for the API's default (`payment_date`). */
+  dateBasis?: SettlementDateBasis;
   /** Prefix of the sub order no. or transaction id. */
   q?: string;
   match?: MatchState;

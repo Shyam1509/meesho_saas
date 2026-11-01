@@ -1,0 +1,292 @@
+<h1 class="text-2xl font-semibold tracking-tight text-slate-900">Overview</h1>
+<p class="mt-2 max-w-3xl text-sm text-slate-600">
+  Your Meesho numbers for a date range: orders and settlement amounts as Meesho reported them, your
+  product costs and expenses, and an <strong class="font-semibold">estimated</strong> contribution
+  worked out from them. {{ notPayout }}
+</p>
+
+<fieldset class="mt-6">
+  <legend class="text-sm font-medium text-slate-800">Show</legend>
+  <div class="mt-1 inline-flex flex-wrap gap-4 rounded-md border border-slate-300 bg-white px-3 py-2">
+    <div class="flex items-center gap-1.5">
+      <input
+        id="overview-scope-all"
+        type="radio"
+        name="overview-scope"
+        value="all"
+        class="size-4 border-slate-300"
+        [checked]="view().scope === 'all'"
+        (change)="selectScope('all')"
+      />
+      <label for="overview-scope-all" class="text-sm text-slate-800">
+        All seller accounts{{ workspace() ? ' of ' + workspace()?.name : '' }}
+      </label>
+    </div>
+    <div class="flex items-center gap-1.5">
+      <input
+        id="overview-scope-account"
+        type="radio"
+        name="overview-scope"
+        value="account"
+        class="size-4 border-slate-300"
+        [checked]="view().scope === 'account'"
+        (change)="selectScope('account')"
+      />
+      <label for="overview-scope-account" class="text-sm text-slate-800">One seller account</label>
+    </div>
+  </div>
+</fieldset>
+
+<!-- Always created (hidden on the all-accounts view), so the accounts load once per visit. -->
+<app-seller-account-picker
+  class="mt-4"
+  inputId="overview-account"
+  purpose="This view shows one seller account."
+  noWorkspaceText="You are not a member of any workspace yet, so there is nothing to show."
+  [hidden]="view().scope !== 'account'"
+/>
+@if (view().scope === 'all' && !workspace()) {
+  <p class="mt-4 text-sm text-slate-700" data-testid="no-workspace">
+    You are not a member of any workspace yet, so there is nothing to show.
+  </p>
+}
+
+<app-filter-bar
+  class="mt-6"
+  label="Dashboard filters"
+  [active]="hasFilters()"
+  (applied)="applyFilters()"
+  (cleared)="clearFilters()"
+>
+  <div>
+    <label for="overview-range" class="block text-sm font-medium text-slate-800">Date range</label>
+    <select
+      id="overview-range"
+      aria-describedby="overview-range-hint"
+      class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+      (change)="selectRange($event)"
+    >
+      @for (option of rangeOptions; track option.id) {
+        <option [value]="option.id" [selected]="draftRange() === option.id">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+    <p id="overview-range-hint" class="mt-1 text-xs text-slate-600" data-testid="range-hint">
+      @if (draftRange() === 'custom') {
+        Both days included, at most 731 days.
+      } @else {
+        {{ draftDates().from | dateRange: draftDates().to }} (India time)
+      }
+    </p>
+  </div>
+  @if (draftRange() === 'custom') {
+    <div>
+      <app-date-range
+        #dateRange
+        legend="Custom dates"
+        idPrefix="overview-date"
+        [(from)]="draftFrom"
+        [(to)]="draftTo"
+      />
+      @if (customError()) {
+        <p class="mt-1 text-sm text-red-700" data-testid="custom-range-error">{{ customError() }}</p>
+      }
+    </div>
+  }
+  <fieldset>
+    <legend class="text-sm font-medium text-slate-800">Date basis</legend>
+    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+      @for (b of bases; track b) {
+        <div class="flex items-center gap-1.5">
+          <input
+            type="radio"
+            name="overview-basis"
+            class="size-4 border-slate-300"
+            aria-describedby="overview-basis-help"
+            [id]="'overview-basis-' + b"
+            [value]="b"
+            [checked]="draftBasis() === b"
+            (change)="selectBasis($event)"
+          />
+          <label [for]="'overview-basis-' + b" class="text-sm text-slate-800">{{
+            basisLabels[b]
+          }}</label>
+        </div>
+      }
+    </div>
+    <p id="overview-basis-help" class="mt-1 max-w-sm text-xs text-slate-600" data-testid="basis-help">
+      {{ basisHelp[draftBasis()] }}
+    </p>
+  </fieldset>
+  <div class="max-w-xs min-w-48 self-start pt-6">
+    <app-checkbox-group
+      legend="Order status"
+      idPrefix="overview-status"
+      describedBy="overview-status-hint"
+      [options]="statusOptions()"
+      [emptyText]="statusEmptyText()"
+      [(selected)]="draftStatus"
+    />
+    <p id="overview-status-hint" class="mt-1 text-xs text-slate-600" data-testid="status-hint">
+      {{ statusHint() }}
+    </p>
+  </div>
+</app-filter-bar>
+
+<p role="status" class="sr-only" data-testid="result-announcement">{{ resultText() }}</p>
+
+@let s = state();
+<div
+  class="mt-6"
+  data-testid="dashboard"
+  [attr.data-state]="s.kind"
+  [attr.aria-busy]="s.kind === 'loading' || busy()"
+>
+  @if (s.kind === 'loading') {
+    <p role="status" class="text-sm text-slate-700">Loading the dashboard…</p>
+  } @else if (s.kind === 'error') {
+    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The dashboard could not be loaded.</p>
+      <p class="mt-1 text-red-800" data-testid="dashboard-error">{{ s.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="refresh()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else if (s.kind === 'ready') {
+    @let d = s.dashboard;
+    <p class="text-sm text-slate-700" data-testid="filter-summary">
+      <span class="font-medium text-slate-900">{{ d.scope.name }}</span> · {{ filterSummary() }}
+      <span class="text-slate-600"> · as of {{ d.generatedAt | displayDateTime }}</span>
+      @if (busy()) {
+        <span class="text-slate-600"> · updating…</span>
+      }
+      <button
+        type="button"
+        class="ml-2 rounded-md border border-slate-300 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        (click)="refresh()"
+      >
+        Refresh<span class="sr-only"> the dashboard</span>
+      </button>
+    </p>
+
+    @if (isEmpty()) {
+      <div
+        class="mt-4 max-w-2xl rounded-lg border border-dashed border-slate-300 bg-white p-6"
+        data-testid="dashboard-empty"
+      >
+        <p class="text-sm font-medium text-slate-900">No data in this date range.</p>
+        <p class="mt-1 text-sm text-slate-600">
+          There are no orders, settlement entries or expenses for these filters. Try a longer date
+          range, the other date basis or fewer statuses — or import your Meesho reports first.
+        </p>
+      </div>
+    } @else if (linkCtx(); as ctx) {
+      <section aria-labelledby="overview-kpis-heading" class="mt-4">
+        <h2 id="overview-kpis-heading" class="sr-only">Key figures</h2>
+        <app-dashboard-kpis [dashboard]="d" [ctx]="ctx" />
+      </section>
+
+      <section aria-labelledby="overview-trend-heading" class="mt-8">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <h2 id="overview-trend-heading" class="text-lg font-semibold text-slate-900">Trend</h2>
+          <div>
+            <label for="overview-granularity" class="block text-sm font-medium text-slate-800">
+              Group by
+            </label>
+            <select
+              id="overview-granularity"
+              class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+              (change)="changeGranularity($event)"
+            >
+              <option value="" [selected]="view().granularity === null">
+                Automatic ({{ d.filters.granularity }})
+              </option>
+              @for (g of granularities; track g) {
+                <option [value]="g" [selected]="view().granularity === g">
+                  {{ g === 'day' ? 'Day' : g === 'week' ? 'Week (from Monday)' : 'Month' }}
+                </option>
+              }
+            </select>
+          </div>
+        </div>
+        <app-trend-chart
+          class="mt-3"
+          [buckets]="d.trend"
+          [granularity]="d.filters.granularity"
+          [from]="d.filters.from"
+          [to]="d.filters.to"
+        />
+      </section>
+
+      @if (d.accounts) {
+        <section aria-labelledby="overview-accounts-heading" class="mt-8">
+          <h2 id="overview-accounts-heading" class="text-lg font-semibold text-slate-900">
+            Account comparison
+          </h2>
+          <app-account-comparison class="mt-3" [dashboard]="d" [ctx]="ctx" [view]="view()" />
+        </section>
+      }
+
+      <section aria-labelledby="overview-settlements-heading" class="mt-8">
+        <h2 id="overview-settlements-heading" class="text-lg font-semibold text-slate-900">
+          Settlement amount (as reported) by type
+        </h2>
+        <app-settlement-breakdown class="mt-3" [settlements]="d.settlements" [ctx]="ctx" />
+      </section>
+
+      <section aria-labelledby="overview-statuses-heading" class="mt-8">
+        <h2 id="overview-statuses-heading" class="text-lg font-semibold text-slate-900">
+          Orders by status
+        </h2>
+        <div class="mt-3 max-w-xl overflow-x-auto">
+          <table class="min-w-full text-sm" data-testid="status-table">
+            <caption class="sr-only">
+              Orders in scope by Meesho’s current status
+            </caption>
+            <thead>
+              <tr class="border-b border-slate-200 text-left text-slate-700">
+                <th scope="col" class="py-2 pr-4 font-semibold">Status (as reported)</th>
+                <th scope="col" class="py-2 text-right font-semibold">Orders</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of d.orders.statusCounts; track row.status) {
+                <tr class="border-b border-slate-100" [attr.data-status]="row.status">
+                  <th scope="row" class="py-2 pr-4 text-left font-normal text-slate-900">
+                    {{ row.status }}
+                  </th>
+                  <td class="py-2 text-right tabular-nums">
+                    <app-drill-link
+                      [link]="statusLink(ctx, row.status)"
+                      [description]="'open the ' + row.status + ' orders'"
+                      >{{ row.count | count }}</app-drill-link
+                    >
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="2" class="py-3 text-slate-600">No orders in this range.</td>
+                </tr>
+              }
+            </tbody>
+            @if (d.orders.statusCounts.length > 0) {
+              <tfoot>
+                <tr class="font-semibold text-slate-900">
+                  <th scope="row" class="py-2 pr-4 text-left">Total</th>
+                  <td class="py-2 text-right tabular-nums">{{ d.orders.count | count }}</td>
+                </tr>
+              </tfoot>
+            }
+          </table>
+        </div>
+      </section>
+    }
+  }
+</div>
+
+<app-api-status class="mt-12 block max-w-md" [compact]="true" />

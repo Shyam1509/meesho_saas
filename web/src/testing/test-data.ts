@@ -1,6 +1,11 @@
 // Shared data and helpers for specs only (excluded from the app build in tsconfig.app.json).
 
 import { ApiFieldError } from '../app/core/api/api-error';
+import {
+  Dashboard,
+  DashboardAccountRow,
+  TrendBucket,
+} from '../app/core/dashboard/dashboard.models';
 import { MeResponse, XSRF_COOKIE_NAME } from '../app/core/auth/auth.models';
 import {
   ImportAction,
@@ -503,4 +508,189 @@ export function expenseList(
   pageSize = 25,
 ): ExpenseListResponse {
   return { items, page, pageSize, total, totals };
+}
+
+/** A trend bucket without rows: 0 orders, every sum missing. */
+export function trendBucket(overrides: Partial<TrendBucket> = {}): TrendBucket {
+  return {
+    bucketStart: '2026-10-01',
+    orders: 0,
+    orderValueDiscounted: null,
+    settlementAmount: null,
+    productCostKnown: null,
+    expenses: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Account 100's dashboard for October 2026 by order date, hand-calculated: settlement 1180.40 −
+ * known cost 600.00 − expenses 250.00 = contribution 330.40. The trend has a gap (2 Oct, no rows)
+ * and a true zero settlement (4 Oct).
+ */
+export function accountDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  return {
+    scope: { kind: 'account', id: '100', name: 'Main store' },
+    filters: {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      basis: 'order_date',
+      statuses: [],
+      granularity: 'day',
+    },
+    orders: {
+      count: 3,
+      units: 4,
+      statusCounts: [
+        { status: 'Delivered', count: 2 },
+        { status: 'RTO Complete', count: 1 },
+      ],
+      orderValueDiscounted: '1497.00',
+      orderValueListed: '1797.00',
+      pricesMissing: 0,
+    },
+    settlements: {
+      amount: '1180.40',
+      count: 4,
+      undatedEntries: 0,
+      byType: [
+        { entryType: 'order_payment', amount: '1300.40', count: 3 },
+        { entryType: 'ads_cost', amount: '-120.00', count: 1 },
+      ],
+      components: {
+        sale: '1497.00',
+        return: '0.00',
+        commission: '-180.30',
+        shipping: '-36.30',
+        tcs: '-7.48',
+        tds: '-1.50',
+        recovery: null,
+        compensation: null,
+      },
+    },
+    productCost: {
+      known: '600.00',
+      knownExact: '600.0000',
+      ordersKnown: 3,
+      ordersCostUnknown: 0,
+      ordersNoProduct: 0,
+      cancelledOrReturnedOrders: 0,
+      cancelledOrReturnedCost: null,
+    },
+    expenses: { amount: '250.00', count: 1, accountAmount: '250.00', workspaceAmount: null },
+    contribution: {
+      amount: '330.40',
+      complete: true,
+      flags: {
+        costUnknown: 0,
+        ordersWithoutSettlement: 0,
+        unmatchedSettlements: 0,
+        pricesMissing: 0,
+        cancelledOrReturned: 0,
+      },
+      formula: 'settlement amount − known product cost − expenses',
+    },
+    trend: [
+      trendBucket({
+        bucketStart: '2026-10-01',
+        orders: 1,
+        orderValueDiscounted: '499.00',
+        settlementAmount: '400.00',
+        productCostKnown: '200.00',
+      }),
+      trendBucket({ bucketStart: '2026-10-02' }),
+      trendBucket({
+        bucketStart: '2026-10-03',
+        orders: 2,
+        orderValueDiscounted: '998.00',
+        settlementAmount: '780.40',
+        productCostKnown: '400.00',
+        expenses: '250.00',
+      }),
+      trendBucket({ bucketStart: '2026-10-04', settlementAmount: '0.00' }),
+    ],
+    generatedAt: '2026-11-01T04:30:00.000Z',
+    ...overrides,
+  };
+}
+
+export function accountRow(overrides: Partial<DashboardAccountRow> = {}): DashboardAccountRow {
+  return {
+    id: '100',
+    displayName: 'Main store',
+    status: 'active',
+    orders: 3,
+    orderValueDiscounted: '1497.00',
+    settlementAmount: '1180.40',
+    productCostKnown: '600.00',
+    expenses: '250.00',
+    contribution: '330.40',
+    complete: true,
+    cancelledOrReturnedOrders: 0,
+    ...overrides,
+  };
+}
+
+/**
+ * Workspace 10's dashboard, hand-calculated. Accounts: Main store (100), Outlet (101: no known
+ * cost, incomplete), Old shop (102, disabled). Total of accounts: 5 orders, order value 2297.50,
+ * settlement 1130.15, cost 600.00, expenses 350.00, contribution 180.15. Workspace-wide expenses
+ * 75.00, so the workspace: expenses 425.00, contribution 105.15, incomplete. Main store's RTO
+ * Complete order counts as cancelled/returned: its known cost 200.00 (of the 600.00) is still
+ * deducted, so Main store is incomplete too.
+ */
+export function workspaceDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  const base = accountDashboard();
+  return {
+    ...base,
+    scope: { kind: 'workspace', id: '10', name: 'Asha Textiles' },
+    orders: { ...base.orders, count: 5, units: 6, orderValueDiscounted: '2297.50' },
+    settlements: { ...base.settlements, amount: '1130.15', count: 5 },
+    productCost: {
+      ...base.productCost,
+      ordersKnown: 3,
+      ordersCostUnknown: 2,
+      cancelledOrReturnedOrders: 1,
+      cancelledOrReturnedCost: '200.00',
+    },
+    expenses: { amount: '425.00', count: 3, accountAmount: '350.00', workspaceAmount: '75.00' },
+    contribution: {
+      amount: '105.15',
+      complete: false,
+      flags: {
+        costUnknown: 2,
+        ordersWithoutSettlement: 1,
+        unmatchedSettlements: 3,
+        pricesMissing: 0,
+        cancelledOrReturned: 1,
+      },
+      formula: 'settlement amount − known product cost − expenses',
+    },
+    accounts: [
+      accountRow({ complete: false, cancelledOrReturnedOrders: 1 }),
+      accountRow({
+        id: '101',
+        displayName: 'Outlet',
+        orders: 2,
+        orderValueDiscounted: '800.50',
+        settlementAmount: '-50.25',
+        productCostKnown: null,
+        expenses: null,
+        contribution: '-50.25',
+        complete: false,
+      }),
+      accountRow({
+        id: '102',
+        displayName: 'Old shop',
+        status: 'disabled',
+        orders: 0,
+        orderValueDiscounted: null,
+        settlementAmount: null,
+        productCostKnown: null,
+        expenses: '100.00',
+        contribution: '-100.00',
+      }),
+    ],
+    ...overrides,
+  };
 }

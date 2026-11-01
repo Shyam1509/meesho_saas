@@ -59,6 +59,17 @@ describe('OrdersApiService', () => {
       req.flush(paged([], 2, 26, 25));
     });
 
+    it('sends the payment-date range (earliest matched settlement entry) after the order dates', () => {
+      service
+        .list('100', { status: ['Delivered'], paymentFrom: '2026-10-03', paymentTo: '2026-11-01' })
+        .subscribe();
+      const req = httpTesting.expectOne((r) => r.url === '/api/v1/accounts/100/orders');
+      expect(req.request.urlWithParams).toBe(
+        '/api/v1/accounts/100/orders?status=Delivered&paymentFrom=2026-10-03&paymentTo=2026-11-01',
+      );
+      req.flush(paged([]));
+    });
+
     it('leaves out an empty status list, empty text and undefined values', () => {
       service.list('100', { status: [], q: '', from: undefined }).subscribe();
       const req = httpTesting.expectOne('/api/v1/accounts/100/orders');

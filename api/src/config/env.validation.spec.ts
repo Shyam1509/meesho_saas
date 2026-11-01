@@ -250,6 +250,30 @@ describe('validateEnv', () => {
     });
   });
 
+  describe('report settings (M7)', () => {
+    it('REPORT_MAX_ROWS defaults to 100 000 and accepts 1..100 000', () => {
+      expect(validateEnv(validRaw()).REPORT_MAX_ROWS).toBe(100_000);
+      expect(
+        validateEnv({ ...validRaw(), REPORT_MAX_ROWS: '1' }).REPORT_MAX_ROWS,
+      ).toBe(1);
+      expect(
+        validateEnv({ ...validRaw(), REPORT_MAX_ROWS: '100000' })
+          .REPORT_MAX_ROWS,
+      ).toBe(100_000);
+    });
+
+    it.each(['0', '100001', '1.5', 'many'])(
+      'rejects REPORT_MAX_ROWS=%s, naming only that variable',
+      (value) => {
+        expect(
+          captureError(() =>
+            validateEnv({ ...validRaw(), REPORT_MAX_ROWS: value }),
+          ).variables,
+        ).toEqual(['REPORT_MAX_ROWS']);
+      },
+    );
+  });
+
   describe('test-database guard', () => {
     it('rejects NODE_ENV=test with a DB_NAME not ending in _test, naming DB_NAME only', () => {
       const error = captureError(() =>

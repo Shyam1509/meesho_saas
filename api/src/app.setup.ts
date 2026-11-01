@@ -51,7 +51,8 @@ export function configureApp(app: NestExpressApplication): void {
   app.enableCors({
     origin: config.corsOrigins,
     credentials: true,
-    exposedHeaders: [REQUEST_ID_HEADER],
+    // Content-Disposition: the CSV exports' filename, readable by the web app's fetch (M7).
+    exposedHeaders: [REQUEST_ID_HEADER, 'Content-Disposition'],
   });
   app.useGlobalPipes(new ValidationPipe(VALIDATION_PIPE_OPTIONS));
   app.useGlobalFilters(new AllExceptionsFilter());

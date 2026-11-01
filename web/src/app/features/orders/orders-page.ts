@@ -53,13 +53,16 @@ import {
 } from '../../shared/url-state/url-state';
 import { OrdersTable } from './orders-table/orders-table';
 
-/** The list as the URL query describes it (`?q&status…&from&to&settlement&sort&page`). */
+/** The list as the URL query describes it (`?q&status…&from&to&paymentFrom&paymentTo&settlement&sort&page`). */
 export interface OrdersView {
   q: string;
   status: readonly string[];
   /** Order date, `YYYY-MM-DD` or `''`. */
   from: string;
   to: string;
+  /** Earliest matched settlement entry's payment date, `YYYY-MM-DD` or `''` (dashboard links). */
+  paymentFrom: string;
+  paymentTo: string;
   settlement: OrderSettlementFilter | null;
   sort: OrderSort;
   page: number;
@@ -84,11 +87,19 @@ export function readOrdersView(params: ParamMap): OrdersView {
     from = '';
     to = '';
   }
+  let paymentFrom = readDate(params, 'paymentFrom');
+  let paymentTo = readDate(params, 'paymentTo');
+  if (!isDateRangeValid(paymentFrom, paymentTo)) {
+    paymentFrom = '';
+    paymentTo = '';
+  }
   return {
     q: readText(params, 'q'),
     status: readList(params, 'status'),
     from,
     to,
+    paymentFrom,
+    paymentTo,
     settlement: readOneOf(params, 'settlement', ORDER_SETTLEMENT_FILTERS),
     sort: readOneOf(params, 'sort', ORDER_SORTS) ?? DEFAULT_ORDER_SORT,
     page: readPage(params),
@@ -124,6 +135,9 @@ export class OrdersPage {
   private readonly dateRange = viewChild<string, ElementRef<HTMLElement>>('dateRange', {
     read: ElementRef,
   });
+  private readonly paymentRange = viewChild<string, ElementRef<HTMLElement>>('paymentRange', {
+    read: ElementRef,
+  });
 
   protected readonly account = this.selection.selected;
   protected readonly view = toSignal(this.route.queryParamMap.pipe(map(readOrdersView)), {
@@ -131,7 +145,15 @@ export class OrdersPage {
   });
   protected readonly hasFilters = computed(() => {
     const v = this.view();
-    return v.q !== '' || v.status.length > 0 || v.from !== '' || v.to !== '' || !!v.settlement;
+    return (
+      v.q !== '' ||
+      v.status.length > 0 ||
+      v.from !== '' ||
+      v.to !== '' ||
+      v.paymentFrom !== '' ||
+      v.paymentTo !== '' ||
+      !!v.settlement
+    );
   });
 
   // What the filter form shows; reset from the URL whenever it changes (apply, back button).
@@ -139,6 +161,8 @@ export class OrdersPage {
   protected readonly draftStatus = linkedSignal<readonly string[]>(() => this.view().status);
   protected readonly draftFrom = linkedSignal(() => this.view().from);
   protected readonly draftTo = linkedSignal(() => this.view().to);
+  protected readonly draftPaymentFrom = linkedSignal(() => this.view().paymentFrom);
+  protected readonly draftPaymentTo = linkedSignal(() => this.view().paymentTo);
   protected readonly draftSettlement = linkedSignal<string>(() => this.view().settlement ?? '');
 
   /** Overrides the URL's page while the URL catches up with an account switch. */
@@ -222,11 +246,17 @@ export class OrdersPage {
       this.dateRange()?.nativeElement.querySelector<HTMLElement>('input')?.focus();
       return;
     }
+    if (!isDateRangeValid(this.draftPaymentFrom(), this.draftPaymentTo())) {
+      this.paymentRange()?.nativeElement.querySelector<HTMLElement>('input')?.focus();
+      return;
+    }
     void this.navigate({
       q: this.draftQ().trim(),
       status: this.draftStatus(),
       from: this.draftFrom(),
       to: this.draftTo(),
+      paymentFrom: this.draftPaymentFrom(),
+      paymentTo: this.draftPaymentTo(),
       settlement: (ORDER_SETTLEMENT_FILTERS as readonly string[]).includes(this.draftSettlement())
         ? (this.draftSettlement() as OrderSettlementFilter)
         : null,
@@ -241,6 +271,8 @@ export class OrdersPage {
       status: [],
       from: '',
       to: '',
+      paymentFrom: '',
+      paymentTo: '',
       settlement: null,
       sort: this.view().sort,
       page: 1,
@@ -285,6 +317,8 @@ export class OrdersPage {
         status: view.status,
         from: view.from,
         to: view.to,
+        paymentFrom: view.paymentFrom,
+        paymentTo: view.paymentTo,
         settlement: view.settlement,
         sort: view.sort === DEFAULT_ORDER_SORT ? null : view.sort,
         page: view.page === 1 ? null : view.page,
@@ -301,6 +335,8 @@ export class OrdersPage {
         status: view.status,
         from: view.from || undefined,
         to: view.to || undefined,
+        paymentFrom: view.paymentFrom || undefined,
+        paymentTo: view.paymentTo || undefined,
         q: view.q || undefined,
         settlement: view.settlement ?? undefined,
       })

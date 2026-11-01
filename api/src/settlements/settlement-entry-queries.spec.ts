@@ -1,8 +1,11 @@
 import { scopeOf } from '../common/sql/account-scope';
 import {
+  ENTRY_ORDER_BASIS_DATE_SQL,
+  ENTRY_ORDER_JOIN,
   entryOrderBy,
   entryScope,
   matchState,
+  orderBasisRangeSql,
   toSettlementEntryDto,
   type SettlementEntryRow,
 } from './settlement-entry-queries';
@@ -195,5 +198,62 @@ describe('settlement list SQL', () => {
     });
     const all = settlementListFilter(scope, { includeSuperseded: true });
     expect(all.conditions).toHaveLength(2);
+  });
+});
+
+describe('settlement list SQL: dateBasis (M7)', () => {
+  const scope = scopeOf({ id: 3, workspaceId: 2 });
+  const flat = (sql: string) => sql.replace(/\s+/g, ' ');
+
+  it('payment_date (default, as before) and order_date filter from / to on different dates', () => {
+    const range = {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      includeSuperseded: false,
+    };
+    const byDefault = settlementListFilter(scope, range);
+    expect(byDefault.conditions.slice(2, 4)).toEqual([
+      'se.payment_date >= :from',
+      'se.payment_date <= :to',
+    ]);
+    expect(
+      settlementListFilter(scope, { ...range, dateBasis: 'payment_date' }),
+    ).toEqual(byDefault);
+    const byOrder = settlementListFilter(scope, {
+      ...range,
+      dateBasis: 'order_date',
+    });
+    expect(byOrder.conditions.slice(2)).toEqual([
+      orderBasisRangeSql(range, true),
+      'se.superseded_by_entry_id IS NULL',
+    ]);
+    expect(byOrder.replacements).toEqual(byDefault.replacements);
+    // No bound, no condition (as for the payment date).
+    expect(
+      settlementListFilter(scope, {
+        dateBasis: 'order_date',
+        includeSuperseded: true,
+      }).conditions,
+    ).toHaveLength(2);
+  });
+
+  it('order-basis range: matched → its order dated in range (grouped subquery), unmatched → own order date, account-level → payment date', () => {
+    expect(flat(orderBasisRangeSql({ from: '2026-10-01' }, true))).toBe(
+      '((se.order_id IS NOT NULL AND (se.seller_account_id, se.order_id) IN (' +
+        ' SELECT bo.seller_account_id, bo.id FROM orders bo' +
+        ' WHERE bo.seller_account_id = :sellerAccountId AND bo.order_date >= :from))' +
+        ' OR (se.order_id IS NULL AND se.sub_order_no IS NOT NULL AND se.order_date >= :from)' +
+        ' OR (se.order_id IS NULL AND se.sub_order_no IS NULL AND se.payment_date >= :from))',
+    );
+  });
+
+  it('order-basis date (SELECT form, with its join): account-level → payment date; else the matched order date first, else the entry order date', () => {
+    expect(flat(ENTRY_ORDER_BASIS_DATE_SQL)).toBe(
+      '(CASE WHEN se.order_id IS NULL AND se.sub_order_no IS NULL THEN se.payment_date' +
+        ' ELSE COALESCE(mo.order_date, se.order_date) END)',
+    );
+    expect(flat(ENTRY_ORDER_JOIN)).toBe(
+      'LEFT JOIN orders mo ON mo.seller_account_id = se.seller_account_id AND mo.id = se.order_id',
+    );
   });
 });

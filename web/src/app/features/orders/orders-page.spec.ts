@@ -180,6 +180,51 @@ describe('OrdersPage', () => {
       req.flush(paged([]));
     });
 
+    it('reads the payment-date range of a dashboard link, sends it, shows it, and applies / clears it', async () => {
+      await render('/orders?status=Delivered&paymentFrom=2026-10-03&paymentTo=2026-11-01');
+      const req = expectList();
+      expect(req.request.params.get('paymentFrom')).toBe('2026-10-03');
+      expect(req.request.params.get('paymentTo')).toBe('2026-11-01');
+      expect(req.request.params.has('from')).toBe(false);
+      req.flush(paged([orderSummary()]));
+      await stable();
+      expect(input('#orders-payment-from').value).toBe('2026-10-03');
+      expect(input('#orders-payment-to').value).toBe('2026-11-01');
+      expect(buttonByText('Clear filters')).toBeDefined();
+
+      setValue(input('#orders-payment-to'), '2026-10-31');
+      await stable();
+      buttonByText('Apply filters')?.click();
+      await stable();
+      expect(url()).toBe('/orders?status=Delivered&paymentFrom=2026-10-03&paymentTo=2026-10-31');
+      const applied = expectList();
+      expect(applied.request.params.get('paymentTo')).toBe('2026-10-31');
+      applied.flush(paged([orderSummary()]));
+      await stable();
+
+      buttonByText('Clear filters')?.click();
+      await stable();
+      expect(url()).toBe('/orders');
+      await flushList();
+    });
+
+    it('drops a payment-date range whose start is after its end, and does not apply one', async () => {
+      await render('/orders?paymentFrom=2026-10-31&paymentTo=2026-10-01');
+      const req = expectList();
+      expect(req.request.params.has('paymentFrom')).toBe(false);
+      expect(req.request.params.has('paymentTo')).toBe(false);
+      req.flush(paged([orderSummary()]));
+      await stable();
+
+      setValue(input('#orders-payment-from'), '2026-10-31');
+      setValue(input('#orders-payment-to'), '2026-10-01');
+      await stable();
+      buttonByText('Apply filters')?.click();
+      await stable();
+      expect(url()).toBe('/orders?paymentFrom=2026-10-31&paymentTo=2026-10-01');
+      expect(document.activeElement).toBe(input('#orders-payment-from'));
+    });
+
     it('applies the filters to the URL (back to page 1) and loads with them', async () => {
       await render('/orders?page=3&sort=subOrderNo');
       await flushList([orderSummary()], 3, 80);

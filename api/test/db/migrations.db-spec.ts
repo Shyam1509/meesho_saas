@@ -73,6 +73,18 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
 
   const importJobColumns = () => columnsOf('import_jobs');
 
+  /** Columns of a settlement_entries index, in index order ([] when it does not exist). */
+  async function indexColumns(name: string): Promise<string[]> {
+    const rows = await select<{ col: string }>(
+      sequelize,
+      `SELECT COLUMN_NAME AS col FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'settlement_entries' AND INDEX_NAME = ?
+       ORDER BY SEQ_IN_INDEX`,
+      [name],
+    );
+    return rows.map((r) => r.col);
+  }
+
   it('undo:all -> migrate -> undo:all -> migrate', async () => {
     runSequelizeCli('db:migrate:undo:all');
     await expectFullyRolledBack();
@@ -115,6 +127,28 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
       'history_only_count',
     ]);
 
+    // M7: the covering index is the latest migration; its undo drops exactly that index.
+    expect(
+      await indexColumns('ix_settlement_entries_account_order_payment'),
+    ).toEqual([
+      'seller_account_id',
+      'order_id',
+      'superseded_by_entry_id',
+      'payment_date',
+    ]);
+    const undo19 = runSequelizeCli('db:migrate:undo');
+    expect(undo19).toContain(
+      '20261101000019-add-settlement-entries-account-order-payment-index: reverted',
+    );
+    expect(
+      await indexColumns('ix_settlement_entries_account_order_payment'),
+    ).toEqual([]);
+    expect(await indexColumns('ix_settlement_entries_account_order')).toEqual([
+      'seller_account_id',
+      'order_id',
+    ]);
+    expect(await columnsOf('settlement_entries')).toEqual(entriesBefore);
+
     const undo18 = runSequelizeCli('db:migrate:undo');
     expect(undo18).toContain(
       '20261031000018-add-settlement-entries-auto-match-blocked: reverted',
@@ -143,6 +177,9 @@ describe('migrations: clean migrate + full rollback (meesho_test)', () => {
     runSequelizeCli('db:migrate');
     expect(await importJobColumns()).toEqual(before);
     expect(await columnsOf('settlement_entries')).toEqual(entriesBefore);
+    expect(
+      await indexColumns('ix_settlement_entries_account_order_payment'),
+    ).toHaveLength(4);
     await expectFullyMigrated();
   }, 120_000);
 });

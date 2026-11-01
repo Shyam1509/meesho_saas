@@ -21,7 +21,10 @@ export interface CheckboxOption {
       >
         <span class="font-medium">{{ legend() }}: </span>{{ summary() }}
       </summary>
-      <fieldset class="max-h-56 overflow-y-auto border-t border-slate-200 px-3 py-2">
+      <fieldset
+        class="max-h-56 overflow-y-auto border-t border-slate-200 px-3 py-2"
+        [attr.aria-describedby]="describedBy()"
+      >
         <legend class="sr-only">{{ legend() }}</legend>
         @if (allOptions().length === 0) {
           <p class="py-1 text-slate-600">{{ emptyText() }}</p>
@@ -48,6 +51,8 @@ export class CheckboxGroup {
   readonly idPrefix = input.required<string>();
   readonly options = input.required<readonly CheckboxOption[]>();
   readonly emptyText = input('Nothing to choose from.');
+  /** Id of a hint outside the component that describes the choices (optional). */
+  readonly describedBy = input<string | null>(null);
   readonly selected = model<readonly string[]>([]);
 
   protected readonly allOptions = computed<CheckboxOption[]>(() => {

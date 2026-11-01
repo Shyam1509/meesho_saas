@@ -20,7 +20,7 @@ and profit are never mixed up.
 | 4 | Import pipeline: CSV orders, XLSX settlements, preview, validation, idempotency, status history | Done (built on synthetic files; verify with real Meesho exports) |
 | 5 | Orders, settlements, reconciliation | Done (matching by sub order no.; supersession deferred) |
 | 6 | Products, effective-dated costs, expenses | Done (one product per SKU; costs per unit from a date) |
-| 7 | Dashboard, account comparison, CSV reports | Not started |
+| 7 | Dashboard, account comparison, CSV reports | Done (formulas documented in `api/README.md`) |
 | 8 | UX hardening | Not started |
 | 9 | Release readiness | Not started |
 
@@ -50,10 +50,20 @@ What works today:
 - **Expenses**: owners add, edit and delete expenses for one seller account or for the whole workspace; members can
   view them. Categories deliberately exclude what the settlement workbook already deducts (Meesho commission,
   shipping, ads, TCS/TDS, recoveries) and product purchase cost, so nothing is counted twice.
-- `GET /api/v1/health` (API + database check), Swagger UI, and an Overview panel with live API/database status.
+- **Overview dashboard**: for one seller account or the whole workspace, a date range (presets or custom) and a
+  basis (by order date or by payment date): orders and units, order value (as reported), settlement amount (as
+  reported, broken down by entry type, with TCS/TDS shown separately), known product cost, expenses, and an
+  **estimated contribution** = settlement amount − known product cost − expenses. It is marked "Incomplete
+  because …" (with counts and links) when orders lack a cost or a settlement, entries are unmatched, prices are
+  missing, or orders are cancelled/RTO/returned (their cost is still deducted). A trend chart (day/week/month) and
+  an account comparison table with totals; every number links to the filtered list behind it. Not a bank payout
+  and not tax advice.
+- **Reports**: CSV downloads of orders, settlement entries and expenses that follow the chosen filters (UTF-8 for
+  Excel, formula-safe cells, up to 100 000 rows; two downloads at a time).
+- `GET /api/v1/health` (API + database check), Swagger UI, and an API status panel at the bottom of the Overview.
 
-The Reports screen is still a placeholder. There is no dashboard or profit figure yet (Milestone 7); amounts shown
-are as reported by Meesho or entered by you.
+The exact metric definitions are in `api/README.md` ("Dashboard and reports"). Amounts are as reported by Meesho or
+entered by you; nothing is inferred when a value is missing.
 
 ## Architecture
 
@@ -62,13 +72,13 @@ meesho_saas/
   api/       NestJS 11 REST API under /api/v1 (TypeScript)
     src/       config/ (env validation), common/ (errors, logging, http), database/ (+ models/), health/,
                auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/, imports/, orders/,
-               settlements/, reconciliation/, products/, expenses/
+               settlements/, reconciliation/, products/, expenses/, dashboard/, reports/
     db/        sequelize-cli: config.js, migrations/, seeders/ (CommonJS: the CLI cannot run TS), SCHEMA.md
     test/      e2e tests (supertest) and db/ schema tests, both against the real test database
   web/       Angular 21 standalone app + Tailwind CSS 4
     src/app/   core/ (API client, auth state + guards, workspaces, seller accounts, health, title), layout/shell,
-               features/ (auth, overview, seller-accounts, settings, imports, orders, settlements, products,
-               expenses), shared/
+               features/ (auth, overview dashboard, seller-accounts, settings, imports, orders, settlements,
+               products, expenses, reports), shared/
   scripts/   dev-mysql.ps1, an optional local MySQL helper for Windows
 ```
 
@@ -132,7 +142,7 @@ Cross-cutting pieces already in place in `api/`:
 4. **Install** (in `api/` and in `web/`): `npm ci`.
    If the drive holding npm's cache is full, point it elsewhere first, e.g. `set npm_config_cache=D:\npm-cache`.
 5. **Create the tables**: `npm run db:migrate` (development) in `api/`; the test scripts migrate the test database
-   themselves. `npm run db:migrate:status` should list 18 migrations as `up`.
+   themselves. `npm run db:migrate:status` should list 19 migrations as `up`.
 6. **Run**: `npm run start:dev` in `api/` (http://localhost:3100) and `npm start` in `web/` (http://localhost:4310,
    which proxies `/api` to the API).
 7. **First user**: set `AUTH_REGISTRATION_ENABLED=true` in `api/.env`, open http://localhost:4310, choose
@@ -159,6 +169,7 @@ Cross-cutting pieces already in place in `api/`:
 | `AUTH_RATE_LIMIT_PER_MINUTE` | no | `10` | Sign-in and sign-up requests per minute per client IP |
 | `IMPORT_MAX_FILE_MB` | no | `10` | Largest import file in MB (1 to 50) |
 | `IMPORT_MAX_ROWS` | no | `50000` | Most data rows in one import file, all sheets together |
+| `REPORT_MAX_ROWS` | no | `100000` | Most rows in one CSV export (larger exports are refused: narrow the filters) |
 
 `api/.env.example` holds placeholders only. Never commit `.env` files, credentials or production data.
 
@@ -174,8 +185,8 @@ Run from `api/`. Plain scripts use `.env` (or real environment variables when `N
 | `npm run db:migrate:undo` | Roll back the last migration (dev DB) |
 | `npm run db:migrate:undo:all` / `npm run db:test:migrate:undo:all` | Roll back every migration (refused when `NODE_ENV=production`) |
 
-There are 18 migrations (`api/db/migrations`): 15 create one table each, 2 add import columns, 1 adds the
-settlement "auto-match blocked" flag. Every one has a tested `down`: `npm run test:db`
+There are 19 migrations (`api/db/migrations`): 15 create one table each, 2 add import columns, 1 adds the
+settlement "auto-match blocked" flag, 1 adds a covering index for the dashboard's payment-date queries. Every one has a tested `down`: `npm run test:db`
 migrates an empty test database, rolls everything back and migrates again. Table design, keys, delete rules and the
 idempotency rules for orders, status history and settlements are documented in
 [`api/db/SCHEMA.md`](api/db/SCHEMA.md); conventions for new migrations are in `api/README.md`.
@@ -229,8 +240,10 @@ transaction writes orders, status events and settlement entries → summary. Not
 
 ## Limitations (current)
 
-- There are no dashboards, profit figures or CSV exports yet (Milestone 7). Settlement and expense totals are plain
-  sums.
+- The estimated contribution is only as good as the inputs: order value's unit-vs-line meaning is unconfirmed, the
+  cancelled/RTO/returned check is a keyword match on Meesho's raw status (CANCEL, RTO, RETURN) until real files
+  confirm the statuses, and there is no bank-payout evidence yet. Export and import limits are kept in memory
+  (one API instance).
 - One product per SKU: several SKUs cannot share a product, and a product's cost is per unit only. Orders imported
   before Milestone 6 whose SKU never appears in a later import stay without a product until "Sync from orders".
 - Settlement entries are matched to orders only by exact sub order no. Revised estimates are not detected yet

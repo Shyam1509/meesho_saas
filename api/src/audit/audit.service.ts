@@ -20,7 +20,8 @@ export type AuditAction =
   | 'product_cost.deleted'
   | 'expense.created'
   | 'expense.updated'
-  | 'expense.deleted';
+  | 'expense.deleted'
+  | 'report.exported';
 
 export interface AuditEntry {
   action: AuditAction;

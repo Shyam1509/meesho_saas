@@ -21,6 +21,9 @@ export interface ConfigOverrides {
   authRateLimitPerMinute?: number;
   importMaxFileMb?: number;
   importMaxRows?: number;
+  reportMaxRows?: number;
+  reportMaxConcurrentExports?: number;
+  reportStallTimeoutMs?: number;
 }
 
 export interface E2eApp {

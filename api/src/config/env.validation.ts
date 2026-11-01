@@ -143,6 +143,13 @@ export class EnvironmentVariables {
   @Min(1)
   @Max(200_000)
   IMPORT_MAX_ROWS: number = 50_000;
+
+  /** Most rows one CSV export may contain (M7); more gets 422 "narrow the filters". Can only be lowered. */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  REPORT_MAX_ROWS: number = 100_000;
 }
 
 const KNOWN_KEYS: ReadonlyArray<keyof EnvironmentVariables> = [
@@ -162,6 +169,7 @@ const KNOWN_KEYS: ReadonlyArray<keyof EnvironmentVariables> = [
   'AUTH_RATE_LIMIT_PER_MINUTE',
   'IMPORT_MAX_FILE_MB',
   'IMPORT_MAX_ROWS',
+  'REPORT_MAX_ROWS',
 ];
 
 /** Test runs may only touch databases whose name ends in this suffix. */

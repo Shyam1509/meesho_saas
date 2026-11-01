@@ -7,6 +7,7 @@ import {
   importDetail,
   orderDetail,
   productDetail,
+  workspaceDashboard,
 } from '../testing/test-data';
 import { App } from './app';
 import { routes } from './app.routes';
@@ -158,6 +159,63 @@ describe('App', () => {
     expect(
       el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
     ).toBe('Expenses');
+  });
+
+  it('/overview shows the dashboard inside the shell, "Overview" current', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/overview');
+    await fixture.whenStable();
+    expect(document.title).toBe('Overview · Meesho Seller SaaS');
+    await answerWhenSent('/api/v1/workspaces/10/accounts', { items: [] });
+    await answerWhenSent('/api/v1/health', {
+      status: 'ok',
+      db: 'up',
+      uptimeSeconds: 1,
+      timestamp: '2026-11-01T04:30:00.000Z',
+    });
+    await vi.waitFor(
+      () =>
+        httpTesting
+          .expectOne((r) => r.url === '/api/v1/workspaces/10/dashboard')
+          .flush(workspaceDashboard()),
+      { timeout: 10000 },
+    );
+    await fixture.whenStable();
+    // The status filter's options: every account of the dashboard (disabled ones too).
+    const statuses = httpTesting.match((r) => r.url.endsWith('/orders/statuses'));
+    expect(statuses.map((r) => r.request.url).sort()).toEqual([
+      '/api/v1/accounts/100/orders/statuses',
+      '/api/v1/accounts/101/orders/statuses',
+      '/api/v1/accounts/102/orders/statuses',
+    ]);
+    statuses.forEach((r) => r.flush({ items: [] }));
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Overview');
+    expect(el.querySelector('[data-testid="kpi-contribution"]')).not.toBeNull();
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe('Overview');
+  });
+
+  it('/reports shows the "Reports" page inside the shell', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/reports');
+    await fixture.whenStable();
+    await answerWhenSent('/api/v1/expenses/categories', { items: [] });
+    await answerWhenSent('/api/v1/workspaces/10/accounts', { items: [] });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Reports');
+    expect(el.querySelectorAll('app-export-card').length).toBe(3);
+    expect(document.title).toBe('Reports · Meesho Seller SaaS');
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe('Reports');
   });
 
   it('/imports shows the "Imports" page inside the shell', async () => {

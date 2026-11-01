@@ -18,7 +18,7 @@ export class SettlementsApiService {
   private readonly baseUrl = inject(API_BASE_URL);
 
   /**
-   * `GET /accounts/:accountId/settlements?page&pageSize&sort&entryType…&from&to&q&match&includeSuperseded`.
+   * `GET /accounts/:accountId/settlements?page&pageSize&sort&entryType…&from&to&dateBasis&q&match&includeSuperseded`.
    * Only the given values are sent; each entry type is its own `entryType` parameter and
    * `includeSuperseded` is sent only when true. `totals` cover every filtered row, not the page.
    */
@@ -30,6 +30,7 @@ export class SettlementsApiService {
       entryType: query.entryType,
       from: query.from,
       to: query.to,
+      dateBasis: query.dateBasis,
       q: query.q,
       match: query.match,
       includeSuperseded: query.includeSuperseded === true ? 'true' : undefined,

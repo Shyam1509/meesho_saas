@@ -1,21 +1,7 @@
-import { Route, Routes } from '@angular/router';
+import { Routes } from '@angular/router';
 
 import { authGuard, guestGuard, registrationEnabledGuard } from './core/auth/auth.guards';
 import { Shell } from './layout/shell/shell';
-
-/**
- * A screen that is not built yet. `heading` and `milestones` reach the shared placeholder page as
- * component inputs (`withComponentInputBinding()`). Milestone numbers follow blueprint §15.
- */
-function placeholderRoute(path: string, title: string, milestones: readonly number[]): Route {
-  return {
-    path,
-    title,
-    loadComponent: () =>
-      import('./shared/placeholder-page/placeholder-page').then((m) => m.PlaceholderPage),
-    data: { heading: title, milestones },
-  };
-}
 
 export const routes: Routes = [
   // Outside the shell, for signed-out visitors only.
@@ -94,7 +80,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/imports/import-detail-page').then((m) => m.ImportDetailPage),
       },
-      placeholderRoute('reports', 'Reports', [7]),
+      {
+        path: 'reports',
+        title: 'Reports',
+        loadComponent: () => import('./features/reports/reports-page').then((m) => m.ReportsPage),
+      },
       {
         path: 'seller-accounts',
         title: 'Seller accounts',

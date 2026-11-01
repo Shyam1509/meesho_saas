@@ -26,8 +26,8 @@ export class OrdersApiService {
   private readonly baseUrl = inject(API_BASE_URL);
 
   /**
-   * `GET /accounts/:accountId/orders?page&pageSize&sort&status…&from&to&q&settlement`. Only the
-   * given values are sent; each status is its own `status` parameter.
+   * `GET /accounts/:accountId/orders?page&pageSize&sort&status…&from&to&paymentFrom&paymentTo&q&settlement`.
+   * Only the given values are sent; each status is its own `status` parameter.
    */
   list(accountId: string, query: OrderListQuery = {}): Observable<PagedResponse<OrderSummary>> {
     const params = toHttpParams({
@@ -37,6 +37,8 @@ export class OrdersApiService {
       status: query.status,
       from: query.from,
       to: query.to,
+      paymentFrom: query.paymentFrom,
+      paymentTo: query.paymentTo,
       q: query.q,
       settlement: query.settlement,
     });

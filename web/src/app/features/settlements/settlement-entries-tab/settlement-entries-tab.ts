@@ -17,12 +17,15 @@ import { Subject, distinctUntilChanged, map, merge, switchMap } from 'rxjs';
 import { describeApiError } from '../../../core/api/api-error';
 import { ReconciliationApiService } from '../../../core/reconciliation/reconciliation-api.service';
 import {
+  DEFAULT_SETTLEMENT_DATE_BASIS,
   DEFAULT_SETTLEMENT_SORT,
   MATCH_STATES,
   MatchState,
+  SETTLEMENT_DATE_BASES,
   SETTLEMENT_ENTRY_TYPES,
   SETTLEMENT_PAGE_SIZE,
   SETTLEMENT_SORTS,
+  SettlementDateBasis,
   SettlementEntry,
   SettlementListResponse,
   SettlementSort,
@@ -56,9 +59,11 @@ import { SettlementEntriesTable } from '../settlement-entries-table/settlement-e
 /** The entries list as the URL query describes it. */
 export interface EntriesView {
   entryType: readonly string[];
-  /** Payment date, `YYYY-MM-DD` or `''`. */
+  /** Payment date (or order date, see `dateBasis`), `YYYY-MM-DD` or `''`. */
   from: string;
   to: string;
+  /** What `from` / `to` filter on (absent: the payment date). */
+  dateBasis: SettlementDateBasis;
   match: MatchState | null;
   q: string;
   includeSuperseded: boolean;
@@ -66,7 +71,7 @@ export interface EntriesView {
   page: number;
 }
 
-/** Reads the entries view (`?entryType…&from&to&match&q&includeSuperseded&sort&page`). */
+/** Reads the entries view (`?entryType…&from&to&dateBasis&match&q&includeSuperseded&sort&page`). */
 export function readEntriesView(params: ParamMap): EntriesView {
   let from = readDate(params, 'from');
   let to = readDate(params, 'to');
@@ -80,6 +85,7 @@ export function readEntriesView(params: ParamMap): EntriesView {
     ),
     from,
     to,
+    dateBasis: readOneOf(params, 'dateBasis', SETTLEMENT_DATE_BASES) ?? DEFAULT_SETTLEMENT_DATE_BASIS,
     match: readOneOf(params, 'match', MATCH_STATES),
     q: readText(params, 'q'),
     includeSuperseded: params.get('includeSuperseded') === 'true',
@@ -131,7 +137,7 @@ export class SettlementEntriesTab {
     const v = this.view();
     return (
       v.entryType.length > 0 || v.from !== '' || v.to !== '' || !!v.match || v.q !== '' ||
-      v.includeSuperseded
+      v.includeSuperseded || v.dateBasis !== DEFAULT_SETTLEMENT_DATE_BASIS
     );
   });
   protected readonly entryTypeOptions: CheckboxOption[] = SETTLEMENT_ENTRY_TYPES.map((t) => ({
@@ -142,6 +148,7 @@ export class SettlementEntriesTab {
   protected readonly draftEntryType = linkedSignal<readonly string[]>(() => this.view().entryType);
   protected readonly draftFrom = linkedSignal(() => this.view().from);
   protected readonly draftTo = linkedSignal(() => this.view().to);
+  protected readonly draftDateBasis = linkedSignal<string>(() => this.view().dateBasis);
   protected readonly draftMatch = linkedSignal<string>(() => this.view().match ?? '');
   protected readonly draftQ = linkedSignal(() => this.view().q);
   protected readonly draftSuperseded = linkedSignal(() => this.view().includeSuperseded);
@@ -173,6 +180,7 @@ export class SettlementEntriesTab {
               entryType: view.entryType,
               from: view.from || undefined,
               to: view.to || undefined,
+              dateBasis: view.dateBasis === 'order_date' ? 'order_date' : undefined,
               q: view.q || undefined,
               match: view.match ?? undefined,
               includeSuperseded: view.includeSuperseded,
@@ -195,6 +203,7 @@ export class SettlementEntriesTab {
       entryType: this.draftEntryType(),
       from: this.draftFrom(),
       to: this.draftTo(),
+      dateBasis: this.draftDateBasis() === 'order_date' ? 'order_date' : 'payment_date',
       match: (MATCH_STATES as readonly string[]).includes(match) ? (match as MatchState) : null,
       q: this.draftQ().trim(),
       includeSuperseded: this.draftSuperseded(),
@@ -208,6 +217,7 @@ export class SettlementEntriesTab {
       entryType: [],
       from: '',
       to: '',
+      dateBasis: DEFAULT_SETTLEMENT_DATE_BASIS,
       match: null,
       q: '',
       includeSuperseded: false,
@@ -291,6 +301,7 @@ export class SettlementEntriesTab {
         entryType: view.entryType,
         from: view.from,
         to: view.to,
+        dateBasis: view.dateBasis === DEFAULT_SETTLEMENT_DATE_BASIS ? null : view.dateBasis,
         match: view.match,
         q: view.q,
         includeSuperseded: view.includeSuperseded,

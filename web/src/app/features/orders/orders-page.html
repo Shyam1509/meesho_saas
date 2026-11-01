@@ -53,6 +53,13 @@
       [(from)]="draftFrom"
       [(to)]="draftTo"
     />
+    <app-date-range
+      #paymentRange
+      legend="First settlement payment date"
+      idPrefix="orders-payment"
+      [(from)]="draftPaymentFrom"
+      [(to)]="draftPaymentTo"
+    />
     <div>
       <label for="orders-settlement" class="block text-sm font-medium text-slate-800">
         Settlement

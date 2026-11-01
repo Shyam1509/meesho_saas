@@ -1,11 +1,18 @@
 <section
   aria-labelledby="api-status-heading"
-  class="rounded-lg border border-slate-200 bg-white p-5"
+  class="rounded-lg border border-slate-200 bg-white"
+  [class]="compact() ? 'p-3' : 'p-5'"
   [attr.data-state]="state()"
   [attr.aria-busy]="loading()"
 >
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <h2 id="api-status-heading" class="text-base font-semibold text-slate-900">API status</h2>
+    <h2
+      id="api-status-heading"
+      class="font-semibold text-slate-900"
+      [class]="compact() ? 'text-sm' : 'text-base'"
+    >
+      API status
+    </h2>
     <button
       type="button"
       class="rounded-md bg-accent-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
@@ -16,7 +23,7 @@
     </button>
   </div>
 
-  <div role="status" class="mt-4 text-sm">
+  <div role="status" class="text-sm" [class]="compact() ? 'mt-2' : 'mt-4'">
     @switch (state()) {
       @case ('loading') {
         <p class="flex flex-wrap items-center gap-2">

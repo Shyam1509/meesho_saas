@@ -1,10 +1,14 @@
 import { scopeOf } from '../common/sql/account-scope';
 import {
   addStatusFilter,
+  FIRST_PAYMENT_DATE_SQL,
+  firstPaymentInRangeSql,
+  orderFirstPaymentJoin,
   orderOrderBy,
   orderScope,
   toOrderSummaryDto,
   toStatusEventDto,
+  workspaceOrderScope,
 } from './order-queries';
 import { orderListFilter } from './orders.service';
 
@@ -124,5 +128,61 @@ describe('order list SQL', () => {
     expect(
       orderListFilter(scope, { settlement: 'matched' }).conditions[2],
     ).toMatch(/^EXISTS .*superseded_by_entry_id IS NULL\)$/s);
+  });
+});
+
+describe('order list SQL: first payment date (M7 payment-date basis)', () => {
+  const scope = scopeOf({ id: 3, workspaceId: 2 });
+  const flat = (sql: string) => sql.replace(/\s+/g, ' ');
+
+  it('paymentFrom / paymentTo: orders whose earliest matched, non-superseded entry payment date is in range (one grouped, non-correlated subquery)', () => {
+    const filter = orderListFilter(scope, {
+      paymentFrom: '2026-10-01',
+      paymentTo: '2026-10-31',
+    });
+    expect(filter.conditions).toHaveLength(3);
+    expect(flat(filter.conditions[2])).toBe(
+      '(o.seller_account_id, o.id) IN (SELECT s.seller_account_id, s.order_id FROM settlement_entries s' +
+        ' WHERE s.seller_account_id = :sellerAccountId AND s.order_id IS NOT NULL AND s.superseded_by_entry_id IS NULL' +
+        ' GROUP BY s.seller_account_id, s.order_id' +
+        ' HAVING MIN(s.payment_date) >= :paymentFrom AND MIN(s.payment_date) <= :paymentTo)',
+    );
+    expect(filter.replacements).toEqual({
+      sellerAccountId: 3,
+      workspaceId: 2,
+      paymentFrom: '2026-10-01',
+      paymentTo: '2026-10-31',
+    });
+    // One bound only; a workspace scope reads every account of the workspace.
+    expect(
+      flat(firstPaymentInRangeSql({ paymentTo: '2026-10-31' }, false)),
+    ).toContain(
+      'WHERE s.seller_account_id IN (SELECT wa.id FROM seller_accounts wa WHERE wa.workspace_id = :workspaceId)',
+    );
+    expect(
+      flat(firstPaymentInRangeSql({ paymentTo: '2026-10-31' }, false)),
+    ).toMatch(/HAVING MIN\(s\.payment_date\) <= :paymentTo\)$/);
+  });
+
+  it('the dashboard join reads the same grouping: has a settlement = a row, first payment = MIN', () => {
+    expect(flat(orderFirstPaymentJoin(true))).toBe(
+      'LEFT JOIN (SELECT s.seller_account_id, s.order_id, MIN(s.payment_date) AS first_payment' +
+        ' FROM settlement_entries s WHERE s.seller_account_id = :sellerAccountId AND s.order_id IS NOT NULL' +
+        ' AND s.superseded_by_entry_id IS NULL GROUP BY s.seller_account_id, s.order_id) fp' +
+        ' ON fp.seller_account_id = o.seller_account_id AND fp.order_id = o.id',
+    );
+    expect(FIRST_PAYMENT_DATE_SQL).toMatch(
+      /^\(SELECT MIN\(s\.payment_date\) FROM settlement_entries s\s+WHERE s\.seller_account_id = o\.seller_account_id AND s\.order_id = o\.id\s+AND s\.superseded_by_entry_id IS NULL\)$/,
+    );
+  });
+
+  it('without them nothing changes; the workspace scope filters on the workspace only', () => {
+    expect(orderListFilter(scope, {}).conditions).toEqual(
+      orderScope(scope).conditions,
+    );
+    expect(workspaceOrderScope(2)).toEqual({
+      conditions: ['o.workspace_id = :workspaceId'],
+      replacements: { workspaceId: 2 },
+    });
   });
 });

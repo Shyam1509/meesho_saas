@@ -1,0 +1,207 @@
+@let d = dashboard();
+@if (workspace()) {
+  <p class="mb-3 max-w-3xl text-sm text-slate-600" data-testid="workspace-links-note">
+    Orders, settlements and products are listed per seller account: open an account’s lists from
+    the account comparison below.
+  </p>
+}
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+  <section
+    aria-labelledby="kpi-orders-heading"
+    class="rounded-lg border border-slate-200 bg-white p-4"
+    data-testid="kpi-orders"
+  >
+    <h3 id="kpi-orders-heading" class="text-sm font-medium text-slate-600">Orders</h3>
+    <p class="mt-1 text-2xl font-semibold text-slate-900 tabular-nums" data-testid="kpi-value">
+      <app-drill-link [link]="ordersLink()" description="open these orders">{{
+        d.orders.count | count
+      }}</app-drill-link>
+    </p>
+    <p class="mt-1 text-sm text-slate-600 tabular-nums" data-testid="kpi-units">
+      {{ d.orders.units | count }} {{ d.orders.units === 1 ? 'unit' : 'units' }}
+    </p>
+  </section>
+
+  <section
+    aria-labelledby="kpi-order-value-heading"
+    class="rounded-lg border border-slate-200 bg-white p-4"
+    data-testid="kpi-order-value"
+  >
+    <h3 id="kpi-order-value-heading" class="text-sm font-medium text-slate-600">
+      Order value (as reported)
+    </h3>
+    <p class="mt-1 text-2xl font-semibold text-slate-900 tabular-nums" data-testid="kpi-value">
+      <app-drill-link [link]="ordersLink()" description="open these orders"
+        ><app-amount [value]="d.orders.orderValueDiscounted" missingLabel="no price reported"
+      /></app-drill-link>
+    </p>
+    <p class="mt-1 text-sm text-slate-600">
+      Discounted supplier price. Listed price:
+      <span class="tabular-nums" data-testid="kpi-listed"
+        ><app-amount [value]="d.orders.orderValueListed" missingLabel="no price reported"
+      /></span>
+    </p>
+    @if (d.orders.pricesMissing > 0) {
+      <p class="mt-1 text-sm text-amber-800" data-testid="kpi-prices-missing">
+        {{ plural(d.orders.pricesMissing, 'order') }} without a reported price — left out, not
+        counted as ₹0.
+      </p>
+    }
+    <p class="mt-2 text-xs text-slate-600">{{ orderValueCaveat }}</p>
+  </section>
+
+  <section
+    aria-labelledby="kpi-settlement-heading"
+    class="rounded-lg border border-slate-200 bg-white p-4"
+    data-testid="kpi-settlement"
+  >
+    <h3 id="kpi-settlement-heading" class="text-sm font-medium text-slate-600">
+      Settlement amount (as reported)
+    </h3>
+    <p class="mt-1 text-2xl font-semibold text-slate-900 tabular-nums" data-testid="kpi-value">
+      <app-drill-link [link]="settlementsLink()" description="open these settlement entries"
+        ><app-amount [value]="d.settlements.amount" missingLabel="no settlement entries"
+      /></app-drill-link>
+    </p>
+    @if (settlementsNarrowed()) {
+      <p class="mt-1 text-sm text-slate-700" data-testid="kpi-settlement-status-note">
+        Narrowed to the chosen statuses’ orders (account-level and unmatched entries count in
+        full). The settlements list has no status filter, so it cannot show this total.
+        @if (allStatusesLink(); as all) {
+          <app-drill-link [link]="all">Entries of every status</app-drill-link>
+        }
+      </p>
+    }
+    <p class="mt-1 text-sm text-slate-600 tabular-nums">
+      {{ plural(d.settlements.count, 'entry', 'entries') }}
+    </p>
+    @if (d.settlements.undatedEntries > 0) {
+      <p class="mt-1 text-sm text-amber-800" data-testid="kpi-undated">
+        {{ plural(d.settlements.undatedEntries, 'entry', 'entries') }} (all dates) without the
+        {{ d.filters.basis === 'order_date' ? 'order' : 'payment' }} date this basis needs — left
+        out.
+      </p>
+    }
+    <p class="mt-2 text-xs text-slate-600">{{ settlementHelp }} Not a bank payout.</p>
+  </section>
+
+  <section
+    aria-labelledby="kpi-cost-heading"
+    class="rounded-lg border border-slate-200 bg-white p-4"
+    data-testid="kpi-product-cost"
+  >
+    <h3 id="kpi-cost-heading" class="text-sm font-medium text-slate-600">Product cost (known)</h3>
+    <p class="mt-1 text-2xl font-semibold text-slate-900 tabular-nums" data-testid="kpi-value">
+      <app-drill-link
+        [link]="productCostLink()"
+        description="open these orders: the list shows each order’s cost, not a total"
+        ><app-amount [value]="d.productCost.known" missingLabel="no known cost"
+      /></app-drill-link>
+    </p>
+    <p class="mt-1 text-sm text-slate-600 tabular-nums">
+      {{ plural(d.productCost.ordersKnown, 'order') }} with a known cost
+    </p>
+    @if (cancelledCostNote(); as note) {
+      <p class="mt-1 text-sm text-amber-800" data-testid="kpi-cost-cancelled-note">{{ note }}</p>
+    }
+    @if (productCostLink()) {
+      <p class="mt-1 text-xs text-slate-600" data-testid="kpi-cost-list-note">
+        The orders list shows each order’s cost, not this total.
+      </p>
+    }
+    @if (ordersWithoutCost() > 0) {
+      <p class="mt-1 text-sm text-amber-800" data-testid="kpi-without-cost">
+        <app-drill-link [link]="missingCostLink()" description="products missing a cost">{{
+          plural(ordersWithoutCost(), 'order')
+        }} without a cost</app-drill-link>
+        ({{ d.productCost.ordersCostUnknown | count }} with no cost on the order date,
+        {{ d.productCost.ordersNoProduct | count }} without a product) — not counted as ₹0.
+      </p>
+    }
+    <p class="mt-2 text-xs text-slate-600">{{ productCostHelp }}</p>
+  </section>
+
+  <section
+    aria-labelledby="kpi-expenses-heading"
+    class="rounded-lg border border-slate-200 bg-white p-4"
+    data-testid="kpi-expenses"
+  >
+    <h3 id="kpi-expenses-heading" class="text-sm font-medium text-slate-600">Expenses</h3>
+    <p class="mt-1 text-2xl font-semibold text-slate-900 tabular-nums" data-testid="kpi-value">
+      <app-drill-link [link]="expensesLink()" description="open these expenses"
+        ><app-amount [value]="d.expenses.amount" missingLabel="no expenses"
+      /></app-drill-link>
+    </p>
+    <p class="mt-1 text-sm text-slate-600 tabular-nums">
+      {{ plural(d.expenses.count, 'expense') }}
+    </p>
+    @if (workspace()) {
+      <p class="mt-1 text-sm text-slate-600 tabular-nums" data-testid="kpi-expenses-split">
+        Seller accounts: <app-amount [value]="d.expenses.accountAmount" missingLabel="none" /> ·
+        Workspace-wide: <app-amount [value]="d.expenses.workspaceAmount" missingLabel="none" />
+      </p>
+    }
+    <p class="mt-2 text-xs text-slate-600">{{ expensesHelp }}</p>
+  </section>
+
+  <section
+    aria-labelledby="kpi-contribution-heading"
+    class="rounded-lg border bg-white p-4 sm:col-span-2 xl:col-span-1"
+    [class]="d.contribution.complete ? 'border-slate-200' : 'border-amber-300'"
+    data-testid="kpi-contribution"
+    [attr.data-complete]="d.contribution.complete"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h3 id="kpi-contribution-heading" class="text-sm font-medium text-slate-600">
+        Estimated contribution
+      </h3>
+      @if (!hasEstimate()) {
+        <!-- No badge: there is nothing to estimate. -->
+      } @else if (d.contribution.complete) {
+        <span
+          class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
+          data-testid="contribution-badge"
+          >Inputs complete</span
+        >
+      } @else {
+        <span
+          class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-700/30"
+          data-testid="contribution-badge"
+          >Incomplete</span
+        >
+      }
+    </div>
+    <p class="mt-1 text-2xl font-semibold text-slate-900 tabular-nums" data-testid="kpi-value">
+      <app-amount [value]="d.contribution.amount" missingLabel="nothing to estimate" />
+    </p>
+    <p class="mt-1 text-sm text-slate-700" data-testid="contribution-formula">
+      = {{ formula }}
+    </p>
+    <p class="mt-1 text-xs text-slate-600">{{ contributionHelp }}</p>
+    @if (statusNote(); as note) {
+      <p class="mt-2 text-xs text-slate-700" data-testid="contribution-status-note">{{ note }}</p>
+    }
+    @if (!d.contribution.complete) {
+      <div class="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900" data-testid="incomplete">
+        <p class="font-medium">Incomplete because:</p>
+        <ul class="mt-1 list-disc space-y-1 pl-5">
+          @for (reason of reasons(); track reason.key) {
+            <li [attr.data-flag]="reason.key">
+              {{ reason.text }}.
+              @if (reason.link) {
+                <app-drill-link [link]="reason.link">{{ reason.linkText }}</app-drill-link>
+              }
+              @if (reason.extraLink) {
+                ·
+                <app-drill-link [link]="reason.extraLink">{{ reason.extraLinkText }}</app-drill-link>
+              }
+            </li>
+          }
+        </ul>
+      </div>
+    }
+    <p class="mt-3 text-xs font-medium text-slate-700" data-testid="not-payout-note">
+      {{ notPayout }}
+    </p>
+  </section>
+</div>

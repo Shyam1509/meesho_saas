@@ -20,6 +20,7 @@ import {
   toBooleanFlag,
   toSearchText,
 } from '../../common/http/list-query';
+import { DATE_BASES, type DateBasis } from '../../common/http/date-basis';
 import { ImportRefDto, UserRefDto } from '../../common/http/refs.dto';
 import {
   SETTLEMENT_ENTRY_TYPES,
@@ -77,9 +78,20 @@ export class ListSettlementsQueryDto extends SettlementSortQueryDto {
   entryType?: SettlementEntryType[];
 
   @ApiPropertyOptional({
+    enum: DATE_BASES,
+    default: 'payment_date',
+    description:
+      "Which date `from` / `to` filter on. payment_date (default): the entry's payment date. order_date (the dashboard's order-date basis): the matched order's order date, else the entry's own order date; account-level entries (no sub order, hence no order date) by their payment date. Entries without that date never match a range",
+  })
+  @IsOptional()
+  @IsIn(DATE_BASES)
+  dateBasis?: DateBasis;
+
+  @ApiPropertyOptional({
     format: 'date',
     example: '2026-10-01',
-    description: 'Payment date from (inclusive), YYYY-MM-DD',
+    description:
+      'From (inclusive), YYYY-MM-DD, on the dateBasis date (default: payment date)',
   })
   @IsOptional()
   @IsCalendarDate()
@@ -88,7 +100,8 @@ export class ListSettlementsQueryDto extends SettlementSortQueryDto {
   @ApiPropertyOptional({
     format: 'date',
     example: '2026-10-31',
-    description: 'Payment date to (inclusive), YYYY-MM-DD; not before from',
+    description:
+      'To (inclusive), YYYY-MM-DD, on the dateBasis date; not before from',
   })
   @IsOptional()
   @IsCalendarDate()

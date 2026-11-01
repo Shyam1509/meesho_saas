@@ -41,7 +41,7 @@ export const ORDER_SETTLEMENT_FILTERS = ['matched', 'unmatched'] as const;
 export type OrderSettlementFilter = (typeof ORDER_SETTLEMENT_FILTERS)[number];
 
 /** Longest raw status (orders.current_status is VARCHAR(64)). */
-const STATUS_MAX_LENGTH = 64;
+export const STATUS_MAX_LENGTH = 64;
 
 /** `status` (repeatable): raw statuses as returned by GET .../orders/statuses, matched exactly. */
 export class OrderStatusFilterQueryDto extends ListPageQueryDto {
@@ -104,6 +104,27 @@ export class ListOrdersQueryDto extends OrderStatusFilterQueryDto {
   @IsOptional()
   @IsIn(ORDER_SETTLEMENT_FILTERS)
   settlement?: OrderSettlementFilter;
+
+  @ApiPropertyOptional({
+    format: 'date',
+    example: '2026-10-01',
+    description:
+      "First payment date from (inclusive), YYYY-MM-DD: orders whose EARLIEST matched, non-superseded settlement entry was paid on or after this day (the dashboard's payment-date basis). Orders without such an entry are excluded",
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  paymentFrom?: string;
+
+  @ApiPropertyOptional({
+    format: 'date',
+    example: '2026-10-31',
+    description:
+      'First payment date to (inclusive), YYYY-MM-DD; not before paymentFrom',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  @IsNotBefore('paymentFrom')
+  paymentTo?: string;
 }
 
 // Response-shape classes for Swagger: never constructed with `new`, instances are typed object literals, hence `!`.

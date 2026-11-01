@@ -1,6 +1,7 @@
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
+import { Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 
 import {
@@ -29,6 +30,22 @@ const EXPECTED_NAV = [
   ['Workspace settings', '/settings'],
 ];
 
+/** A page under the shell that calls no API (every real screen loads data since Milestone 7). */
+@Component({ template: '<h1>Quiet page</h1>' })
+class QuietPage {}
+
+const QUIET_URL = '/quiet-test-page';
+
+/** The app's routes, plus {@link QuietPage} under the shell. */
+const TEST_ROUTES: Routes = routes.map((route) =>
+  route.component === Shell
+    ? {
+        ...route,
+        children: [...(route.children ?? []), { path: QUIET_URL.slice(1), component: QuietPage }],
+      }
+    : route,
+);
+
 describe('Shell', () => {
   let harness: RouterTestingHarness;
   let httpTesting: HttpTestingController;
@@ -47,11 +64,11 @@ describe('Shell', () => {
     ) as HTMLButtonElement;
   const detectChanges = () => harness.fixture.detectChanges();
 
-  // Starts on a page that calls no API (Orders, Settlements, Products, Expenses and Imports load
-  // data), so these tests see only the shell's own requests.
+  // Starts on a page that calls no API (every real screen loads data), so these tests see only
+  // the shell's own requests.
   async function createHarness(me: MeResponse = ME_TWO_WORKSPACES): Promise<void> {
     auth.setSession(me);
-    harness = await RouterTestingHarness.create('/reports');
+    harness = await RouterTestingHarness.create(QUIET_URL);
   }
 
   beforeEach(() => {
@@ -59,7 +76,7 @@ describe('Shell', () => {
     setXsrfCookie();
     TestBed.configureTestingModule({
       providers: [
-        provideRouter(routes, withComponentInputBinding()),
+        provideRouter(TEST_ROUTES, withComponentInputBinding()),
         provideApiHttpClient(),
         provideHttpClientTesting(),
       ],
@@ -139,6 +156,9 @@ describe('Shell', () => {
 
     it('marks only the active link with aria-current="page"', async () => {
       await harness.navigateByUrl('/reports');
+      // The Reports page loads the expense categories and the seller accounts.
+      httpTesting.expectOne('/api/v1/expenses/categories').flush({ items: [] });
+      httpTesting.expectOne('/api/v1/workspaces/10/accounts').flush({ items: [] });
       detectChanges();
 
       const current = navLinks().filter((a) => a.getAttribute('aria-current') === 'page');
@@ -246,7 +266,7 @@ describe('Shell', () => {
         'Sign-out failed: Could not reach the server. Check your connection and try again.',
       );
       expect(auth.isAuthenticated()).toBe(true);
-      expect(TestBed.inject(Router).url).toBe('/reports');
+      expect(TestBed.inject(Router).url).toBe(QUIET_URL);
     });
   });
 });

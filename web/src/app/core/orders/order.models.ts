@@ -124,6 +124,13 @@ export interface OrderListQuery extends PageQuery {
   from?: string;
   /** Order date to, `YYYY-MM-DD` (inclusive). */
   to?: string;
+  /**
+   * Payment date from, `YYYY-MM-DD` (inclusive): orders whose EARLIEST matched, non-superseded
+   * settlement entry was paid on or after this day (the dashboard's payment-date basis).
+   */
+  paymentFrom?: string;
+  /** Payment date to, `YYYY-MM-DD` (inclusive). */
+  paymentTo?: string;
   /** Prefix of the sub order no. or SKU, or part of the product name. */
   q?: string;
   settlement?: OrderSettlementFilter;

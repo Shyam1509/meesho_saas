@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, switchMap } from 'rxjs';
 
@@ -8,7 +8,7 @@ import { HealthCheckResult } from '../../../core/health/health.models';
 
 export type ApiStatusState = 'loading' | HealthCheckResult['kind'];
 
-/** "API status" panel: checks `GET /health` on load and on "Check again". */
+/** "API status" panel: checks `GET /health` on load and on "Check again". `compact`: a smaller panel. */
 @Component({
   selector: 'app-api-status',
   imports: [DatePipe],
@@ -16,6 +16,9 @@ export type ApiStatusState = 'loading' | HealthCheckResult['kind'];
   templateUrl: './api-status.html',
 })
 export class ApiStatus {
+  /** Less padding and smaller type, for a panel at the bottom of a page. */
+  readonly compact = input(false);
+
   private readonly healthApi = inject(HealthApiService);
   private readonly checkRequests = new Subject<void>();
 

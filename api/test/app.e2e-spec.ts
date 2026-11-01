@@ -49,7 +49,7 @@ describe('API foundation (e2e)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
-  it('CORS: allowed origin gets credentials + exposed x-request-id; others get no allow-origin', async () => {
+  it('CORS: allowed origin gets credentials + exposed x-request-id and Content-Disposition (M7 CSV filenames); others get no allow-origin', async () => {
     if (!app) throw new Error('app not initialised');
     // Whatever the test environment configures (default http://localhost:4310).
     const origin = app.get(AppConfigService).corsOrigins[0];
@@ -60,7 +60,7 @@ describe('API foundation (e2e)', () => {
     expect(allowed.headers['access-control-allow-origin']).toBe(origin);
     expect(allowed.headers['access-control-allow-credentials']).toBe('true');
     expect(allowed.headers['access-control-expose-headers']).toBe(
-      'x-request-id',
+      'x-request-id,Content-Disposition',
     );
 
     const denied = await request(server)

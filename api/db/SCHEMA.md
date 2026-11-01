@@ -1,4 +1,4 @@
-# Database schema (Milestones 2–6)
+# Database schema (Milestones 2–7)
 
 MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrations in
 `db/migrations` (one table per migration: `20261030000001` … `20261030000014` in Milestone 2,
@@ -6,6 +6,8 @@ MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrat
 `20261030000016-add-import-jobs-data-as-of-and-preview` and `20261030000017-add-import-jobs-history-only-count`
 in Milestone 4, `20261031000018-add-settlement-entries-auto-match-blocked` in Milestone 5); the app never syncs.
 Milestone 6 (products, costs, expenses) added no migration: it uses the M2 tables and keys as they are.
+Milestone 7 (dashboard and reports) added one index, `20261101000019-add-settlement-entries-account-order-payment-index`
+(see [Dashboard indexes](#dashboard-indexes-milestone-7)).
 `test/db/*.db-spec.ts` asserts everything below against a freshly migrated `meesho_test`.
 
 ## Conventions
@@ -177,6 +179,14 @@ self-references and cycles.
 - A run records `matched_count` (entries it matched) and, after matching, `unmatched_settlement_count`
   (entries with a sub order, no order, not superseded) and `unmatched_order_count` (orders with no matched,
   non-superseded entry).
+
+## Dashboard indexes (Milestone 7)
+
+`ix_settlement_entries_account_order_payment (seller_account_id, order_id, superseded_by_entry_id, payment_date)`
+covers "the matched, non-superseded entries of an order and their payment dates": the first payment date of the
+payment-date basis (`MIN(payment_date)` grouped by order, read once per query as a materialised subquery) and
+`HAS_SETTLEMENT_SQL` (`EXISTS` per order) are index-only reads. The M2 `ix_settlement_entries_account_order` stays
+(it backs the order FK). Reversible: its `down` drops only this index.
 
 ## Effective-dated cost rule
 

@@ -25,6 +25,7 @@ import type {
 } from './dto/order.dto';
 import {
   addStatusFilter,
+  firstPaymentInRangeSql,
   HAS_SETTLEMENT_SQL,
   ORDER_SUMMARY_COLUMNS,
   ORDER_SUMMARY_JOINS,
@@ -53,15 +54,29 @@ interface OrderDetailRow extends OrderSummaryRow {
   lastImportCreatedAt: Date | string;
 }
 
+/** The filter values of GET .../orders (also used by the orders CSV and the M7 dashboard). */
+export type OrderListFilterValues = Pick<
+  ListOrdersQueryDto,
+  'status' | 'from' | 'to' | 'q' | 'settlement' | 'paymentFrom' | 'paymentTo'
+>;
+
 /** The ListOrdersQueryDto filters as SQL conditions on `orders o` (values bound, never spliced). */
 export function orderListFilter(
   scope: AccountScope,
-  query: Pick<
-    ListOrdersQueryDto,
-    'status' | 'from' | 'to' | 'q' | 'settlement'
-  >,
+  query: OrderListFilterValues,
 ): SqlFilter {
-  const filter = orderScope(scope);
+  return addOrderListFilters(orderScope(scope), query);
+}
+
+/**
+ * Adds the orders-list filters to `filter` (an account scope, or a workspace scope for the M7 workspace
+ * dashboard). The dashboard selects its orders through this same function, so a dashboard count and the
+ * filtered list total always come from the same SQL.
+ */
+export function addOrderListFilters(
+  filter: SqlFilter,
+  query: OrderListFilterValues,
+): SqlFilter {
   addStatusFilter(filter, query.status);
   if (query.from) {
     filter.conditions.push('o.order_date >= :from');
@@ -70,6 +85,17 @@ export function orderListFilter(
   if (query.to) {
     filter.conditions.push('o.order_date <= :to');
     filter.replacements.to = query.to;
+  }
+  // M7: orders whose FIRST payment date (earliest matched, non-superseded entry) is in the range.
+  if (query.paymentFrom || query.paymentTo) {
+    filter.conditions.push(
+      firstPaymentInRangeSql(
+        query,
+        filter.replacements.sellerAccountId !== undefined,
+      ),
+    );
+    if (query.paymentFrom) filter.replacements.paymentFrom = query.paymentFrom;
+    if (query.paymentTo) filter.replacements.paymentTo = query.paymentTo;
   }
   if (query.q) {
     filter.conditions.push(

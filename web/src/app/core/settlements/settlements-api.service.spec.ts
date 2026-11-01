@@ -55,6 +55,15 @@ describe('SettlementsApiService', () => {
     req.flush(settlementList([]));
   });
 
+  it('sends dateBasis after the dates when given', () => {
+    service.list('100', { from: '2026-10-01', to: '2026-10-31', dateBasis: 'order_date' }).subscribe();
+    const req = httpTesting.expectOne((r) => r.url === '/api/v1/accounts/100/settlements');
+    expect(req.request.urlWithParams).toBe(
+      '/api/v1/accounts/100/settlements?from=2026-10-01&to=2026-10-31&dateBasis=order_date',
+    );
+    req.flush(settlementList([]));
+  });
+
   it('never sends includeSuperseded=false (the API default)', () => {
     service.list('100', { includeSuperseded: false, entryType: [] }).subscribe();
     const req = httpTesting.expectOne('/api/v1/accounts/100/settlements');

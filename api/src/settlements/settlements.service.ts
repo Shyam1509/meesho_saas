@@ -15,6 +15,7 @@ import type {
   SettlementListDto,
 } from './dto/settlement.dto';
 import {
+  addEntryDateRange,
   countAndSumEntries,
   entryOrderBy,
   entryScope,
@@ -23,27 +24,33 @@ import {
   selectEntries,
 } from './settlement-entry-queries';
 
-/** The ListSettlementsQueryDto filters as SQL conditions on `settlement_entries se` (values bound). */
+/** The filter values of GET .../settlements (also used by the settlements CSV). */
+export type SettlementListFilterValues = Pick<
+  ListSettlementsQueryDto,
+  | 'entryType'
+  | 'from'
+  | 'to'
+  | 'q'
+  | 'match'
+  | 'includeSuperseded'
+  | 'dateBasis'
+>;
+
+/**
+ * The ListSettlementsQueryDto filters as SQL conditions on `settlement_entries se` (values bound).
+ * `from` / `to` apply to the payment date unless `dateBasis=order_date` (M7: the dashboard's order-date
+ * basis, through the same addEntryDateRange the dashboard uses).
+ */
 export function settlementListFilter(
   scope: AccountScope,
-  query: Pick<
-    ListSettlementsQueryDto,
-    'entryType' | 'from' | 'to' | 'q' | 'match' | 'includeSuperseded'
-  >,
+  query: SettlementListFilterValues,
 ): SqlFilter {
   const filter = entryScope(scope);
   if (query.entryType && query.entryType.length > 0) {
     filter.conditions.push('se.entry_type IN (:entryTypes)');
     filter.replacements.entryTypes = [...new Set(query.entryType)];
   }
-  if (query.from) {
-    filter.conditions.push('se.payment_date >= :from');
-    filter.replacements.from = query.from;
-  }
-  if (query.to) {
-    filter.conditions.push('se.payment_date <= :to');
-    filter.replacements.to = query.to;
-  }
+  addEntryDateRange(filter, query.dateBasis ?? 'payment_date', query);
   if (query.q) {
     filter.conditions.push(
       `(se.sub_order_no LIKE :qPrefix ${LIKE_ESCAPE} OR se.transaction_id LIKE :qPrefix ${LIKE_ESCAPE})`,

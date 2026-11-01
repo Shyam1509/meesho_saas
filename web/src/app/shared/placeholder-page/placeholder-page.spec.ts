@@ -1,13 +1,7 @@
-import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { TitleStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
-import { RouterTestingHarness } from '@angular/router/testing';
+import { Route, Routes } from '@angular/router';
 
-import { ME_OWNER } from '../../../testing/test-data';
 import { routes } from '../../app.routes';
-import { provideApiHttpClient } from '../../core/api/provide-api-http-client';
-import { AuthStateService } from '../../core/auth/auth-state.service';
-import { AppTitleStrategy } from '../../core/title/app-title-strategy';
 import { PlaceholderPage, formatMilestones } from './placeholder-page';
 
 describe('PlaceholderPage', () => {
@@ -27,31 +21,12 @@ describe('PlaceholderPage', () => {
     expect(formatMilestones([2, 3])).toBe('Milestones 2 and 3');
   });
 
-  // These screens sit inside the app shell, which needs a signed-in user. Seller accounts and
-  // Workspace settings are real pages since Milestone 3, Imports since Milestone 4, Orders and
-  // Settlements & reconciliation since Milestone 5, Products & costs and Expenses since Milestone 6
-  // (see app.spec.ts and their own specs).
-  describe('through the router', () => {
-    beforeEach(() => {
-      TestBed.configureTestingModule({
-        providers: [
-          provideRouter(routes, withComponentInputBinding()),
-          provideApiHttpClient(),
-          provideHttpClientTesting(),
-          { provide: TitleStrategy, useClass: AppTitleStrategy },
-        ],
-      });
-      TestBed.inject(AuthStateService).setSession(ME_OWNER);
-    });
-
-    it.each([['/reports', 'Reports', 'Milestone 7']])('%s shows "%s" planned in %s and sets the page title', async (url, heading, milestone) => {
-      const harness = await RouterTestingHarness.create();
-      await harness.navigateByUrl(url);
-
-      const el = harness.routeNativeElement as HTMLElement;
-      expect(el.querySelector('app-placeholder-page h1')?.textContent?.trim()).toBe(heading);
-      expect(el.textContent).toContain(`Not built yet — planned in ${milestone}.`);
-      expect(document.title).toBe(`${heading} · Meesho Seller SaaS`);
-    });
+  // Every screen is a real page since Milestone 7 (Reports was the last placeholder; see
+  // app.spec.ts and each page's own spec). The page stays for screens added later.
+  it('is not used by any route any more (no route carries placeholder milestones)', () => {
+    const all = (list: Routes): Route[] => list.flatMap((r) => [r, ...all(r.children ?? [])]);
+    const placeholders = all(routes).filter((r) => r.data?.['milestones'] !== undefined);
+    expect(placeholders.map((r) => r.path)).toEqual([]);
+    expect(all(routes).find((r) => r.path === 'reports')?.title).toBe('Reports');
   });
 });

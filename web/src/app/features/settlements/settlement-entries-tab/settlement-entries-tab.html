@@ -36,9 +36,26 @@
     [options]="entryTypeOptions"
     [(selected)]="draftEntryType"
   />
+  <div>
+    <label for="entries-date-basis" class="block text-sm font-medium text-slate-800">
+      Dates are
+    </label>
+    <select
+      id="entries-date-basis"
+      class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+      (change)="draftDateBasis.set(inputValue($event))"
+    >
+      <option value="payment_date" [selected]="draftDateBasis() !== 'order_date'">
+        Payment date
+      </option>
+      <option value="order_date" [selected]="draftDateBasis() === 'order_date'">
+        Order date (matched order’s, else the entry’s)
+      </option>
+    </select>
+  </div>
   <app-date-range
     #dateRange
-    legend="Payment date"
+    [legend]="draftDateBasis() === 'order_date' ? 'Order date' : 'Payment date'"
     idPrefix="entries-date"
     [(from)]="draftFrom"
     [(to)]="draftTo"

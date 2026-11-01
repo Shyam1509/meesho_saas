@@ -81,6 +81,14 @@ export function orderScope(scope: AccountScope): SqlFilter {
   };
 }
 
+/** Orders of every seller account of a workspace (id from requireWorkspace): the M7 workspace dashboard. */
+export function workspaceOrderScope(workspaceId: number): SqlFilter {
+  return {
+    conditions: ['o.workspace_id = :workspaceId'],
+    replacements: { workspaceId },
+  };
+}
+
 /**
  * "The order has a settlement": at least one entry matched to it that is not superseded. Orders without
  * one are the reconciliation exception "orders without settlement".
@@ -89,13 +97,76 @@ export const HAS_SETTLEMENT_SQL = `EXISTS (SELECT 1 FROM settlement_entries s
                 WHERE s.seller_account_id = o.seller_account_id AND s.order_id = o.id
                   AND s.superseded_by_entry_id IS NULL)`;
 
+/**
+ * The order's first payment date (Milestone 7, payment-date basis): the EARLIEST `payment_date` of its
+ * matched, non-superseded settlement entries. NULL when it has no such entry or none of them has a payment
+ * date, so such an order falls in no payment period. Each order has exactly one first payment date, so it is
+ * counted in exactly one period even when its entries were paid in several. This correlated per-order form
+ * is for small row sets only (the orders CSV column, 1000 rows per batch: an index-only lookup on
+ * ix_settlement_entries_account_order_payment); aggregates and filters use the grouped forms below.
+ */
+export const FIRST_PAYMENT_DATE_SQL = `(SELECT MIN(s.payment_date) FROM settlement_entries s
+                WHERE s.seller_account_id = o.seller_account_id AND s.order_id = o.id
+                  AND s.superseded_by_entry_id IS NULL)`;
+
+/**
+ * The scope's matched, non-superseded entries grouped by order (FROM … GROUP BY, no SELECT list): one row per
+ * order that has a settlement (= HAS_SETTLEMENT_SQL), with MIN(s.payment_date) = FIRST_PAYMENT_DATE_SQL.
+ * An index-only scan of ix_settlement_entries_account_order_payment, read once per query (MySQL materialises
+ * it) instead of a subquery per order. `accountScoped`: binds :sellerAccountId, else :workspaceId (every
+ * account of the workspace); the outer `orders o` scope still decides which orders count.
+ */
+function firstPaymentGroupsSql(accountScoped: boolean): string {
+  const accounts = accountScoped
+    ? 's.seller_account_id = :sellerAccountId'
+    : 's.seller_account_id IN (SELECT wa.id FROM seller_accounts wa WHERE wa.workspace_id = :workspaceId)';
+  return `FROM settlement_entries s
+                WHERE ${accounts} AND s.order_id IS NOT NULL AND s.superseded_by_entry_id IS NULL
+                GROUP BY s.seller_account_id, s.order_id`;
+}
+
+/**
+ * "The order's first payment date is in [paymentFrom, paymentTo]" (either bound optional), NON-correlated:
+ * exactly the orders whose FIRST_PAYMENT_DATE_SQL is in range. Shared by the orders list (`paymentFrom` /
+ * `paymentTo`), the orders CSV and the dashboard.
+ */
+export function firstPaymentInRangeSql(
+  range: { paymentFrom?: string; paymentTo?: string },
+  accountScoped: boolean,
+): string {
+  const having = [
+    range.paymentFrom ? 'MIN(s.payment_date) >= :paymentFrom' : null,
+    range.paymentTo ? 'MIN(s.payment_date) <= :paymentTo' : null,
+  ].filter((c): c is string => c !== null);
+  return `(o.seller_account_id, o.id) IN (SELECT s.seller_account_id, s.order_id ${firstPaymentGroupsSql(accountScoped)}
+                HAVING ${having.join(' AND ')})`;
+}
+
+/**
+ * LEFT JOIN `fp` = the order's settlement summary from the same grouping: `fp.order_id IS NOT NULL` ⇔
+ * HAS_SETTLEMENT_SQL, `fp.first_payment` = FIRST_PAYMENT_DATE_SQL (M7 dashboard aggregates).
+ */
+export function orderFirstPaymentJoin(accountScoped: boolean): string {
+  return `LEFT JOIN (SELECT s.seller_account_id, s.order_id, MIN(s.payment_date) AS first_payment
+                ${firstPaymentGroupsSql(accountScoped)}) fp
+         ON fp.seller_account_id = o.seller_account_id AND fp.order_id = o.id`;
+}
+
+/** The raw-status comparison (exact, binary) bound to `:statuses`, on the orders alias `alias`. */
+export function statusInSql(alias: string): string {
+  return `${alias}.current_status COLLATE utf8mb4_bin IN (:statuses)`;
+}
+
+/** The raw-status comparison (exact, binary) bound to `:statuses`; needs an `orders o` in scope. */
+export const STATUS_IN_SQL = statusInSql('o');
+
 /** Raw statuses compared exactly (binary), the way GET .../orders/statuses groups them. */
 export function addStatusFilter(
   filter: SqlFilter,
   statuses: readonly string[] | undefined,
 ): void {
   if (!statuses || statuses.length === 0) return;
-  filter.conditions.push('o.current_status COLLATE utf8mb4_bin IN (:statuses)');
+  filter.conditions.push(STATUS_IN_SQL);
   filter.replacements.statuses = [...new Set(statuses)];
 }
 

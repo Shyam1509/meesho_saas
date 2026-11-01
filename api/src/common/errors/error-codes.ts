@@ -14,6 +14,8 @@ export const ERROR_CODE_STATUS = {
   PAYLOAD_TOO_LARGE: HttpStatus.PAYLOAD_TOO_LARGE,
   /** An uploaded file the importer cannot read or accept (wrong type, encoding, headers, limits). */
   PARSE_ERROR: HttpStatus.UNPROCESSABLE_ENTITY,
+  /** A CSV export (M7) with more rows than REPORT_MAX_ROWS: refused before any row is sent. */
+  EXPORT_TOO_LARGE: HttpStatus.UNPROCESSABLE_ENTITY,
   RATE_LIMITED: HttpStatus.TOO_MANY_REQUESTS,
   /** Any other 4xx not listed above (e.g. 405, 406, 415, a plain 422). */
   BAD_REQUEST: HttpStatus.BAD_REQUEST,

@@ -378,6 +378,7 @@ describe('schema contract (information_schema of meesho_test)', () => {
       expect.arrayContaining([
         'ix_import_jobs_account_sha256',
         'ix_settlement_entries_account_transaction',
+        'ix_settlement_entries_account_order_payment',
       ]),
     );
   });

@@ -12,6 +12,9 @@ settlement ↔ order reconciliation (see [Orders, settlements and reconciliation
 Milestone 6 (products, costs and expenses): one product per SKU mapped to orders, effective-dated unit costs
 with each order's product cost, and manual expenses without double counting (see
 [Products, costs and expenses](#products-costs-and-expenses-milestone-6)).
+Milestone 7 (dashboard and reports): documented metrics for one seller account or a whole workspace with an
+account comparison, order-date / payment-date basis, trends, and CSV exports of orders, settlements and expenses
+(see [Dashboard and reports](#dashboard-and-reports-milestone-7)).
 The repository-level README covers the whole project.
 
 ## Setup
@@ -66,11 +69,11 @@ Everything requires a session unless marked public. ids in JSON are strings; tim
 | `POST /imports/:importId/confirm` `{ skipErrorRows? }` | member | 200 `completed`; 409 not previewed / no valid rows / errors not acknowledged / file already imported / account disabled; 500 system failure (job becomes `failed`) |
 | `POST /imports/:importId/retry` | member | `failed`, or `importing` for more than 15 minutes → runs again from the staged rows → 200 `completed` |
 | `POST /imports/:importId/cancel` | member | `previewed` / `failed` / stale `importing` → `cancelled`; deletes the staged rows (the job and its counts stay) |
-| `GET /accounts/:accountId/orders?page&pageSize&sort&status&from&to&q&settlement` | member | `{ items: OrderSummary[], page, pageSize, total }` (default 25 per page, `-orderDate`) |
+| `GET /accounts/:accountId/orders?page&pageSize&sort&status&from&to&q&settlement&paymentFrom&paymentTo` | member | `{ items: OrderSummary[], page, pageSize, total }` (default 25 per page, `-orderDate`) |
 | `GET /accounts/:accountId/orders/statuses` | member | `{ items: [{ status, count }] }`: raw current statuses, most orders first |
 | `GET /accounts/:accountId/orders/:orderId` | member | OrderDetail (status history, matched entries, first / last import); 404 for an order of another account |
 | `GET /accounts/:accountId/orders/:orderId/status-history` | member | `{ items: StatusEvent[] }`, oldest observation first |
-| `GET /accounts/:accountId/settlements?page&pageSize&sort&entryType&from&to&q&match&includeSuperseded` | member | `{ items, page, pageSize, total, totals: { settlementAmount, count } }` (default `-paymentDate`) |
+| `GET /accounts/:accountId/settlements?page&pageSize&sort&entryType&dateBasis&from&to&q&match&includeSuperseded` | member | `{ items, page, pageSize, total, totals: { settlementAmount, count } }` (default `-paymentDate`; `from` / `to` on the payment date unless `dateBasis=order_date`) |
 | `GET /accounts/:accountId/reconciliation` | member | overview: counts and as-reported sums, orders with / without settlement, last run |
 | `GET /accounts/:accountId/reconciliation/unmatched-settlements?page&pageSize&sort` | member | entries with a sub order no and no order |
 | `GET /accounts/:accountId/reconciliation/orders-without-settlement?page&pageSize&status&sort` | member | orders with no matched, non-superseded entry |
@@ -91,6 +94,12 @@ Everything requires a session unless marked public. ids in JSON are strings; tim
 | `POST /accounts/:accountId/expenses`, `POST /workspaces/:workspaceId/expenses` `{ expenseDate, category, description?, amount }` | owner | 201 Expense (scope `account` / `workspace` from the route); 409 account disabled |
 | `PATCH /expenses/:expenseId` `{ expenseDate?, category?, description?, amount? }` | owner | 200 Expense (scope and account never change); 409 account disabled |
 | `DELETE /expenses/:expenseId` | owner | 204 |
+| `GET /accounts/:accountId/dashboard?from&to&basis&status&granularity` | member | Dashboard of one seller account (see [Dashboard and reports](#dashboard-and-reports-milestone-7)); 400 bad dates / range > 731 days / `to` < `from` / bad basis or granularity |
+| `GET /workspaces/:workspaceId/dashboard?from&to&basis&status&granularity` | member | Dashboard of every account of the workspace + workspace-wide expenses, with `accounts` (one row per seller account, disabled ones too) |
+| `GET /accounts/:accountId/reports/orders.csv?<orders list filters, no page>` | member | CSV download (or 422 `EXPORT_TOO_LARGE`, 429 `RATE_LIMITED` when 2 exports are already streaming); `HEAD` = the row-count check only |
+| `GET /accounts/:accountId/reports/settlements.csv?<settlements list filters incl. dateBasis, no page>` | member | CSV download (or 422) |
+| `GET /accounts/:accountId/reports/expenses.csv?from&to&category&sort` | member | CSV download (or 422) |
+| `GET /workspaces/:workspaceId/reports/expenses.csv?from&to&category&sort&scope=workspace\|all` | member | CSV download (or 422); `scope` default `workspace` (workspace-wide only), `all` adds every account's |
 
 Every ImportSummary carries `allowedActions` (`confirm` / `retry` / `cancel`), computed by the server: the UI
 shows only those buttons.
@@ -285,7 +294,7 @@ M6) and `import.cancelled` are written to `audit_logs` in the same transaction. 
 > **Amounts are as reported by Meesho, not profit.** Every amount is the value of the source row (DECIMAL text,
 > `null` = not reported, never 0). The only arithmetic is a plain `SUM(settlement_amount)`, done by MySQL in
 > DECIMAL, over exactly the rows the request selects. TCS / TDS are separate columns and are never netted.
-> Contribution / profit formulas are Milestone 7.
+> Estimated contribution (never "profit"): see [Dashboard and reports](#dashboard-and-reports-milestone-7).
 
 **Access.** Reads and "run matching now": members; manual match / unmatch: owner. A non-member gets 404 on every
 route. Every query filters on the workspace + account ids that `requireAccount` resolved, so an order or entry
@@ -305,10 +314,13 @@ match state / settlement filter, a date that is not a real `YYYY-MM-DD`, `to` be
 characters → 400. Repeatable filters (`status`, `entryType`) are sent as `?status=A&status=B` (at most 50).
 - Orders: `sort` ∈ `orderDate` (default `-orderDate`), `subOrderNo`, `currentStatus` (case-insensitive order),
   `updatedAt`; `status` = raw statuses compared exactly (binary, as `GET .../orders/statuses` lists them: `DELIVERED`
-  and `Delivered` are different values); `from` / `to` = order date (inclusive); `settlement=matched|unmatched`.
+  and `Delivered` are different values); `from` / `to` = order date (inclusive); `settlement=matched|unmatched`;
+  `paymentFrom` / `paymentTo` (M7) = the order's FIRST payment date (earliest matched, non-superseded entry), the
+  dashboard's payment-date order set.
 - Settlements: `sort` ∈ `paymentDate` (default `-paymentDate`), `settlementAmount`, `orderDate`, `createdAt`;
-  `from` / `to` = payment date; `match=matched|unmatched|account_level`; `includeSuperseded=true|false` (default
-  false).
+  `from` / `to` = payment date, or with `dateBasis=order_date` (M7) the matched order's order date, else the entry's
+  own order date, account-level entries by their payment date (the dashboard's order-date basis);
+  `match=matched|unmatched|account_level`; `includeSuperseded=true|false` (default false).
 - Search `q` (trimmed; blank = no search): sub order no / SKU (orders) or sub order no / transaction id
   (settlements) STARTING WITH the text, exact case (index friendly); orders also match product names
   CONTAINING it, any case. `%` and `_` are escaped and match themselves.
@@ -465,9 +477,173 @@ nothing to do 209 ms, re-linking 9,000 orders 0.8 s.
 orders it changes. Products can be archived, not deleted. Costs and expenses are INR only. The timings above are
 from a development machine with synthetic data (and varied by up to ~2× between runs).
 
+## Dashboard and reports (Milestone 7)
+
+> **Estimated contribution, never profit.** The dashboard never says "sales", "revenue" or "profit"; bank payout is
+> not represented anywhere; TCS / TDS are not tax advice or a filed liability. Read-only aggregation; one migration
+> adds a covering index (`20261101000019`, see Indexes and performance).
+
+**Metric definitions** (the single source of truth, quoted verbatim from the M7 design, with the 2026-11-01 user
+decision on cancelled / returned orders added to definition 6; the same words are in the code comments of
+`src/dashboard/*` and the Swagger descriptions):
+
+> Filters: `from`, `to` (inclusive YYYY-MM-DD, max range 731 days, default last 30 days ending today IST), `basis`
+> (`order_date` | `payment_date`, default `order_date`), optional `status` (repeatable raw order statuses; applies to
+> order metrics and, in order-date basis, to which orders' settlements/costs are included).
+>
+> Orders in scope:
+> - `order_date` basis: orders with `order_date` in range (and status filter).
+> - `payment_date` basis: orders that have at least one matched, non-superseded settlement entry, and whose
+>   EARLIEST matched non-superseded entry `payment_date` is in range (each order counted in exactly one period).
+>
+> 1. **Orders** = count of orders in scope; **Units** = Σ quantity; **Status counts** = orders in scope grouped by raw
+>    `current_status`.
+> 2. **Order value (as reported)** = Σ `supplier_discounted_price` of orders in scope, plus the same for
+>    `supplier_listed_price` shown separately. Labelled "as reported by Meesho — whether this is per unit or per order
+>    line is not confirmed yet"; `pricesMissing` = orders in scope with a NULL discounted price (shown, never treated
+>    as 0). Never called "sales" or "revenue".
+> 3. **Settlement amount (as reported)** = Σ `settlement_amount` of non-superseded entries in scope:
+>    - `order_date` basis: entries matched to an order in scope + unmatched entries whose own `order_date` is in range +
+>      account-level entries (no sub order) whose `payment_date` is in range (they have no order date — stated in UI).
+>    - `payment_date` basis: entries whose `payment_date` is in range.
+>    Entries that lack the date the basis needs are excluded and counted as `undatedEntries`.
+>    Breakdown by `entry_type` (order payment, ads, referral, compensation, recovery, other) and informational sums of
+>    sale, return, commission, shipping, TCS, TDS, recovery, compensation over the same entries ("already included in
+>    the settlement amount — not deducted again"). TCS/TDS: "not tax advice or a filed liability".
+> 4. **Product cost (known)** = Σ M6 order product cost (effective unit cost on order date × quantity) of orders in
+>    scope with state `known`; `ordersCostUnknown` (state unknown) and `ordersNoProduct` (state no_product) counted.
+> 5. **Expenses** = Σ expense `amount` with `expense_date` in range (regardless of basis): account dashboard → that
+>    account's expenses; workspace dashboard → all account expenses of the workspace + workspace-wide expenses (shown as
+>    their own line).
+> 6. **Estimated contribution** = Settlement amount (3) − Product cost known (4) − Expenses (5).
+>    Settlement amount is Meesho's net figure (commission, shipping, returns, recoveries, TCS/TDS already reflected), so
+>    nothing else is deducted. Flags (each with a count, shown as "Incomplete because …"): `costUnknown` (4 has unknown or
+>    no-product orders), `ordersWithoutSettlement` (orders in scope with no matched non-superseded entry — not settled
+>    yet or unmatched), `unmatchedSettlements` (unmatched entries in scope), `pricesMissing`, `cancelledOrReturned`
+>    (orders in scope — the same orders as the product cost (4) — whose raw `current_status` contains, case-insensitively,
+>    `CANCEL`, `RTO` or `RETURN`: a keyword match until the real Meesho statuses are confirmed; their known product cost
+>    is still deducted, reported as `productCost.cancelledOrReturnedOrders` and `productCost.cancelledOrReturnedCost`,
+>    already included in the known cost). `complete` = no flag.
+>    Never shown as "profit" without "estimated"; bank payout is NOT represented anywhere.
+> 7. **Trend** = per bucket (`granularity` day|week (ISO, Monday)|month; default day ≤ 62 days, week ≤ 366, else month)
+>    of: orders, order value, settlement amount, product cost known, expenses — using each metric's own date per basis.
+>    Buckets with no data are present with zeros for counts and null for sums? → counts 0, sums "0.00" only when the
+>    bucket truly has rows summing to zero; buckets without rows → null sums (UI shows a gap, not 0).
+>
+> All sums: SQL DECIMAL, decimal strings (2 dp; product cost exact then rounded HALF-UP to 2 dp for display totals —
+> return both `productCostKnown` (2 dp) and `productCostKnownExact` (4 dp)). Null when no rows.
+
+**How the definitions are applied** (interpretations):
+- Range lengths count days inclusively (`from` = `to` is 1 day; 731 is the longest). `to` defaults to today in
+  India, `from` to `to` − 29. A `from` after the defaulted `to` → 400 on `from`.
+- Status filter, payment-date basis: it narrows the order metrics (count, units, status counts, order value,
+  `pricesMissing`) only; product cost covers all orders in scope, like the settlement amount (which a status filter
+  does not narrow in that basis). Order-date basis with a status filter: unmatched and account-level entries have no
+  order status and stay in the settlement amount.
+- An order matched only to entries without a payment date has no first payment date and falls in no payment period.
+- `undatedEntries` counts every non-superseded entry of the scope without the basis date, regardless of the date range
+  (all time; it is not narrowed to the selected period): payment
+  basis = no payment date; order basis = unmatched entries without an order date (matched entries use the order's date,
+  account-level ones their payment date).
+- `byType` always lists the six entry types in the same order (`amount` null, `count` 0 when none).
+- `productCostKnown` / `productCostKnownExact` are returned as `productCost.known` / `productCost.knownExact`.
+- Cancelled / returned ("count it, but warn"): the classification is one constant + one SQL fragment
+  (`src/orders/order-status-classes.ts`: `UPPER(current_status) LIKE '%CANCEL%' OR … '%RTO%' OR … '%RETURN%'`, its JS
+  twin unit-tested); `cancelledOrReturnedCost` is their known cost rounded HALF-UP to 2 dp (null when none of them has a
+  known cost); each account row carries `cancelledOrReturnedOrders` and its `complete` reflects the flag.
+  Contribution uses the 2-dp `known` (the number shown next to it), so the shown numbers subtract exactly; a null part
+  counts as nothing, and all three null gives null.
+- `expenses.workspaceAmount` is null on an account dashboard; there `accountAmount` = `amount` (the account's own).
+- Trend: buckets start on the day, the ISO Monday or the 1st of the month (the first / last bucket may be partial;
+  only rows dated in the range count); product cost is rounded to 2 dp per bucket (buckets can differ from the 2-dp
+  total by a paisa when unit costs have 4 decimals; `knownExact` always adds up).
+- Account comparison (workspace dashboard): `accounts` = `{ id, displayName, status, orders, orderValueDiscounted,
+  settlementAmount, productCostKnown, expenses, contribution, complete, cancelledOrReturnedOrders }` per seller account
+  (disabled ones too, by name). The rows and the totals are exact sums (`decimal-text.ts`, BigInt) of the SAME grouped
+  rows (one scan per table), so Σ rows + `expenses.workspaceAmount` = the workspace totals (product cost is rounded per
+  account, which can differ from the rounded workspace total only with 4-decimal unit costs in several accounts;
+  `knownExact` always adds up).
+
+**One number, one source (traceability).** Every row set is built by the list's own filter code, in one read-only
+snapshot: orders through `addOrderListFilters` (`?from&to&status`, or `?paymentFrom&paymentTo&status` =
+`firstPaymentInRangeSql`), settlement entries through `addEntryDateRange` + `NOT_SUPERSEDED_SQL`
+(`GET .../settlements?dateBasis=…&from&to`; the order basis = `orderBasisRangeSql`), expenses through
+`addExpenseFilters` (`GET .../expenses?from&to`, workspace `?scope=all`), product costs by the effective-cost rule
+(`effective-cost.ts`: `orderCostRangesJoin`, the aggregate twin of `ORDER_COST_JOIN`). So: `orders.count` = the orders list `total`; `settlements.amount` / `count` = the
+settlements list `totals`; `flags.ordersWithoutSettlement` = `?settlement=unmatched`; `flags.unmatchedSettlements` =
+`?match=unmatched`; each `byType` row = `?entryType=…`; expenses = the expenses list `totals`;
+`productCost.knownExact` = Σ of the listed orders' `productCost.total` (state known). The e2e suite asserts each of
+these. With a status filter in the order-date basis, the settlement amount has no exact list twin (the settlements
+list has no order-status filter).
+
+**Reports (CSV).** `GET .../reports/orders.csv` and `.../settlements.csv` take exactly the filters and `sort` of the
+matching list (no `page` / `pageSize`: 400); `.../expenses.csv` takes `from&to&category&sort` (workspace: `&scope`).
+Members; a non-member → 404. `text/csv; charset=utf-8`, UTF-8 BOM, CRLF, a header row,
+`Content-Disposition: attachment; filename="<name>-<type>-<from>_<to>.csv"; filename*=UTF-8''<name>-<type>-…` (the
+ASCII name: accents dropped, other characters → `-`, at most 60; the RFC 5987 name keeps letters and digits of any
+script, percent-encoded; `…-from-<d>.csv` / `…-to-<d>.csv` / `<name>-<type>.csv` with one or no bound; the orders CSV
+uses `paymentFrom` / `paymentTo` when `from` / `to` are absent; CORS exposes `Content-Disposition`),
+`Cache-Control: no-store`. Resources: at most 2 exports stream at once in the process (more → 429 `RATE_LIMITED`
+"Exports are busy, try again in a moment.", `Retry-After: 5`); each holds ONE pooled connection at a time — a short
+write transaction counts the rows (over the cap → 422, nothing written) and records the audit row, then the read-only
+snapshot counts again (rows imported meanwhile may make it 422 before any byte: never a partial file); a client that
+leaves releases the slot and the connection at once, and one that accepts no data for 60 s is cut off. Then, in that
+snapshot: COUNT first — more than `REPORT_MAX_ROWS` (env; default and maximum 100000) → 422 `EXPORT_TOO_LARGE`
+("narrow the filters") before any byte; then the ids in list order (ids only), then rows in batches of 1000 by primary
+key, mapped by the list's own mappers and streamed with backpressure (a client that leaves stops the export). Amounts
+are plain numbers as stored (dot decimal, no ₹, no grouping, negatives keep "-"); missing = empty cell; product cost
+totals exact (4 dp); timestamps ISO-8601 UTC. CSV-injection guard: a TEXT cell starting with TAB or CR, or with `=` `+` `-` `@` (or the
+full-width ＝ ＋ － ＠) after any leading spaces / TAB / CR / LF, gets a leading `'` (numeric cells are never touched).
+Audit `report.exported` (entity = the seller account, or the workspace for the workspace expenses CSV; `after` =
+`{ type, filters, rowCount }`) before the snapshot opens. `HEAD` on the
+same URL runs only the count check (200 with the download headers, or 422) and writes no audit row.
+- orders.csv: Order ID, Sub Order No, Order No, Order Date, Product Name, SKU, Size, Quantity, Customer State, Supplier
+  Listed Price (as reported), Supplier Discounted Price (as reported), Current Status, Status Observed At (UTC),
+  Settlement Match (matched / unmatched), Settlement Entries, Settlement Amount (as reported), First Payment Date,
+  Product ID, Product Cost State, Unit Cost, Cost Effective From, Product Cost Total, Source Import ID, Source Import
+  File (the import the current values came from).
+- settlements.csv: Entry ID, Entry Type, Sheet, Transaction ID, Sub Order No, Order Date (entry), Payment Date,
+  Settlement Amount (as reported), Sale Amount, Return Amount, Meesho Commission, Shipping Charge, TCS, TDS, Recovery,
+  Compensation, Is Estimate, Superseded By Entry ID, Match State, Match Method, Matched Order ID, Matched Order Sub Order
+  No, Matched Order Date, Matched At (UTC), Matched By (email), Auto Match Blocked, Source Import ID, Source Import File,
+  Created At (UTC).
+- expenses.csv: Expense ID, Expense Date, Scope, Seller Account ID, Seller Account, Category, Category Label,
+  Description, Amount (INR), Created By (email), Created At (UTC), Updated At (UTC).
+
+**Indexes and performance.** One index, `ix_settlement_entries_account_order_payment (seller_account_id, order_id,
+superseded_by_entry_id, payment_date)` (migration `20261101000019`, reversible; `db/SCHEMA.md`). A dashboard is 4
+queries (+1 account list on a workspace), each table read ONCE: orders + costs grouped by (account, raw status,
+trend bucket), entries grouped by (account, type, bucket), expenses grouped by (account, bucket), and the undated
+count; the service adds the groups up exactly into the totals, the account rows, the status counts, the type breakdown
+and the trend. No per-row correlated subquery: the first payment date is one materialised grouping (`fp`, also giving
+"has a settlement"), the order basis of entries is a branch per match state with one materialised subquery of the
+scope's orders in range, and costs join the scope's cost rows turned into date ranges once (`LEAD`). Measured with
+`test/perf/dashboard.perf-spec.ts` (run on demand) on the test MySQL: 3 accounts × 20,000 orders × 20,000 entries
+(+200 SKUs with costs, 1,600 expenses), median of 7 HTTP calls, before → after this rewrite (ms):
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Account dashboard, order basis, 184 days (weekly) | 3126 | 429 |
+| Account dashboard, payment basis, 184 days | 4465 | 324 |
+| Account dashboard, order basis, October (daily) | 1454 | 196 |
+| Account dashboard, payment basis, October | 2267 | 194 |
+| Workspace dashboard (3 accounts), order basis, 184 days | 16247 | 1641 |
+| Workspace dashboard (3 accounts), payment basis, 184 days | 19001 | 1030 |
+| Orders list `?paymentFrom&paymentTo` (October), page + total | 389 | 95 |
+| Settlements list `?dateBasis=order_date` (October), page + totals | 563 | 152 |
+
+EXPLAIN ANALYZE of the two list filters (COUNT, one account): first payment in October 252 ms (a dependent subquery
+per order, 20,000 loops) → 60 ms (the grouped subquery materialised once, then one lookup per order); order-basis
+entries in October 188 ms (two dependent subqueries per entry) → 64 ms (the orders-in-range subquery materialised once).
+What is left is reading and grouping the rows of the scope (20k / 60k).
+
+**Limitations.** Synthetic fixtures only (no real Meesho file). Statuses are raw (case and spelling variants are
+separate; the cancelled / returned keyword match is provisional). The export limiter is in memory (one API instance).
+Timings are from a development machine (they varied by ~±20% between runs).
+
 Errors always use `{ "error": { "code", "message", "requestId", "details"? } }`; codes and
 their HTTP status live in `src/common/errors/error-codes.ts` (an `ApiException` carries an explicit code,
-e.g. `PARSE_ERROR` 422). Every response carries an
+e.g. `PARSE_ERROR` / `EXPORT_TOO_LARGE` 422). Every response carries an
 `x-request-id` header (a valid incoming one is reused).
 
 ## Conventions
