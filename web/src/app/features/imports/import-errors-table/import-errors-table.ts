@@ -19,6 +19,9 @@ import {
 } from '../../../core/imports/import.models';
 import { ImportsApiService } from '../../../core/imports/imports-api.service';
 import { Pager } from '../../../shared/pager/pager';
+import { LoadingState } from '../../../shared/loading-state/loading-state';
+import { ErrorState } from '../../../shared/error-state/error-state';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 type ErrorsState =
   | { kind: 'none' }
@@ -40,7 +43,7 @@ interface ErrorLine {
  */
 @Component({
   selector: 'app-import-errors-table',
-  imports: [Pager],
+  imports: [Pager, LoadingState, ErrorState, TableRegion],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -49,21 +52,18 @@ interface ErrorLine {
       @if (state.kind === 'none') {
         <p class="text-sm text-slate-700">No rows have errors.</p>
       } @else if (state.kind === 'loading') {
-        <p role="status" class="text-sm text-slate-700">Loading the rows with errors…</p>
+        <app-loading-state text="Loading the rows with errors…" />
       } @else if (state.kind === 'error') {
-        <div role="alert" class="rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-          <p class="font-medium text-red-800">The rows with errors could not be loaded.</p>
-          <p class="mt-1 text-red-800">{{ state.message }}</p>
-          <button
-            type="button"
-            class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            (click)="reload()"
-          >
-            Try again
-          </button>
-        </div>
+        <app-error-state
+          heading="The rows with errors could not be loaded."
+          [message]="state.message"
+          (retry)="reload()"
+        />
       } @else {
-        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div
+          appTableRegion="Rows with errors"
+          class="overflow-x-auto rounded-lg border border-slate-200 bg-white"
+        >
           <table class="min-w-full divide-y divide-slate-200 text-sm">
             <caption class="sr-only">
               Rows with errors

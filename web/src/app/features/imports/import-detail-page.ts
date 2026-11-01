@@ -21,6 +21,8 @@ import { ImportActions } from './import-actions/import-actions';
 import { ImportResult, importResultNotice } from './import-result/import-result';
 import { ImportReview } from './import-review/import-review';
 import { ImportStatusBadge } from './import-status-badge/import-status-badge';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
 
 /** The API's id format (decimal BIGINT as a string). */
 const IMPORT_ID_PATTERN = /^[1-9][0-9]{0,18}$/;
@@ -37,7 +39,15 @@ type DetailState =
  */
 @Component({
   selector: 'app-import-detail-page',
-  imports: [RouterLink, ImportActions, ImportResult, ImportReview, ImportStatusBadge],
+  imports: [
+    RouterLink,
+    ImportActions,
+    ImportResult,
+    ImportReview,
+    ImportStatusBadge,
+    LoadingState,
+    ErrorState,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-detail-page.html',
 })

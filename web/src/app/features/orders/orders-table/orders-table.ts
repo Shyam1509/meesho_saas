@@ -11,6 +11,7 @@ import {
 } from '../../../shared/format/format.pipes';
 import { SortButton, ariaSort } from '../../../shared/sort/sort';
 import { OrderProductCostView } from '../order-product-cost/order-product-cost';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 /**
  * Orders as a table: sub order no. (links to the order), order date, product, quantity, Meesho's
@@ -29,11 +30,15 @@ import { OrderProductCostView } from '../order-product-cost/order-product-cost';
     DisplayDateTimePipe,
     SortButton,
     OrderProductCostView,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div
+      [appTableRegion]="caption()"
+      class="overflow-x-auto rounded-lg border border-slate-200 bg-white"
+    >
       <table class="min-w-full divide-y divide-slate-200 text-sm" data-testid="orders-table">
         <caption class="sr-only">
           {{ caption() }}

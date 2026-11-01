@@ -24,6 +24,7 @@ export class AuthStateService {
   private readonly session = signal<MeResponse | null>(null);
   private readonly sessionCheckErrorState = signal<string | null>(null);
   private readonly registrationEnabledState = signal<boolean | null>(null);
+  private readonly sessionExpiredState = signal(false);
   private pendingLoad: Promise<void> | null = null;
 
   readonly status = this.statusState.asReadonly();
@@ -37,6 +38,11 @@ export class AuthStateService {
   readonly sessionCheckError = this.sessionCheckErrorState.asReadonly();
   /** `GET /auth/config` result; `null` until {@link loadConfig} has answered. */
   readonly registrationEnabled = this.registrationEnabledState.asReadonly();
+  /**
+   * True after a signed-in session ended without the user signing out (see
+   * {@link expireSession}), until they sign in again: the sign-in page then says why they are there.
+   */
+  readonly sessionExpired = this.sessionExpiredState.asReadonly();
 
   /**
    * `GET /auth/me`. 200 → authenticated; 401 → anonymous (not an error) and the session ends;
@@ -108,6 +114,7 @@ export class AuthStateService {
   setSession(me: MeResponse): void {
     this.session.set(me);
     this.sessionCheckErrorState.set(null);
+    this.sessionExpiredState.set(false);
     this.statusState.set('authenticated');
   }
 
@@ -125,6 +132,19 @@ export class AuthStateService {
   endSession(): void {
     this.clear();
     this.selectedWorkspace.clear();
+  }
+
+  /**
+   * The API said the session is over (401: expired, revoked, user disabled) while the app was in
+   * use: {@link endSession}, and if someone was signed in, remember it so the sign-in page can say
+   * "Your session ended".
+   */
+  expireSession(): void {
+    const wasSignedIn = this.isAuthenticated();
+    this.endSession();
+    if (wasSignedIn) {
+      this.sessionExpiredState.set(true);
+    }
   }
 
   /** Applies a rename to the cached memberships, keeping the API's order (name, then id). */

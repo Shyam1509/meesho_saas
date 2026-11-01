@@ -59,37 +59,31 @@
 
   @let state = list();
   @if (state.kind === 'loading') {
-    <p role="status" class="text-sm text-slate-700">Loading seller accounts…</p>
+    <app-loading-state text="Loading seller accounts…" />
   } @else if (state.kind === 'no-workspace') {
     <p class="text-sm text-slate-700">
       You are not a member of any workspace yet, so there are no seller accounts to show.
     </p>
   } @else if (state.kind === 'error') {
-    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-      <p class="font-medium text-red-800">The seller accounts could not be loaded.</p>
-      <p class="mt-1 text-red-800">{{ state.message }}</p>
-      <button
-        type="button"
-        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        (click)="retry()"
-      >
-        Try again
-      </button>
-    </div>
+    <app-error-state
+      heading="The seller accounts could not be loaded."
+      [message]="state.message"
+      (retry)="retry()"
+    />
   } @else {
     @if (state.accounts.length === 0) {
-      <div class="max-w-2xl rounded-lg border border-dashed border-slate-300 bg-white p-6">
-        <p class="text-sm font-medium text-slate-900">No seller accounts yet.</p>
-        <p class="mt-1 text-sm text-slate-600">
-          @if (isOwner()) {
-            Add your Meesho supplier accounts to import their reports.
-          } @else {
-            An owner of this workspace can add them.
-          }
-        </p>
-      </div>
+      <app-empty-state heading="No seller accounts yet.">
+        @if (isOwner()) {
+          Add your Meesho supplier accounts to import their reports.
+        } @else {
+          An owner of this workspace can add them.
+        }
+      </app-empty-state>
     } @else {
-      <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div
+        appTableRegion="Seller accounts"
+        class="overflow-x-auto rounded-lg border border-slate-200 bg-white"
+      >
         <table class="min-w-full divide-y divide-slate-200 text-sm">
           <caption class="sr-only">
             Seller accounts in

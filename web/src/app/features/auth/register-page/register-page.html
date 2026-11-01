@@ -29,7 +29,7 @@
         type="text"
         formControlName="displayName"
         autocomplete="name"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.displayName) ? 'true' : null"
         [attr.aria-describedby]="
           showError(form.controls.displayName) ? 'register-display-name-error' : null
@@ -50,7 +50,7 @@
         formControlName="email"
         autocomplete="email"
         spellcheck="false"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.email) ? 'true' : null"
         [attr.aria-describedby]="showError(form.controls.email) ? 'register-email-error' : null"
       />
@@ -70,7 +70,7 @@
         type="password"
         formControlName="password"
         autocomplete="new-password"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.password) ? 'true' : null"
         [attr.aria-describedby]="
           showError(form.controls.password)
@@ -98,7 +98,7 @@
         type="password"
         formControlName="confirmPassword"
         autocomplete="new-password"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.confirmPassword) ? 'true' : null"
         [attr.aria-describedby]="
           showError(form.controls.confirmPassword) ? 'register-confirm-password-error' : null
@@ -120,7 +120,7 @@
         type="text"
         formControlName="workspaceName"
         autocomplete="organization"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.workspaceName) ? 'true' : null"
         [attr.aria-describedby]="
           showError(form.controls.workspaceName)

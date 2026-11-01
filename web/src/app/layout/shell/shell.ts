@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   DestroyRef,
   ElementRef,
   computed,
@@ -18,10 +19,14 @@ import { PRODUCT_NAME } from '../../core/product';
 import { WorkspaceContextService } from '../../core/workspaces/workspace-context.service';
 import { NAV_ITEMS } from '../nav-items';
 
+/** Tailwind's `md` breakpoint, from which the navigation is a sidebar. */
+const MD_UP = '(min-width: 48rem)';
+
 /**
  * App shell for signed-in users: skip link, header (workspace switcher, user, role, sign out),
  * primary navigation and the routed page. Below the `md` breakpoint the navigation hides behind a
- * "Menu" button.
+ * "Menu" button; while that menu is open it covers the page, which is made `inert` (no Tab stops
+ * behind it), and it closes when the window grows to `md`.
  */
 @Component({
   selector: 'app-shell',
@@ -81,12 +86,39 @@ export class Shell {
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild.required<ElementRef<HTMLButtonElement>>('menuButton');
 
+  constructor() {
+    // From `md` up the navigation is always shown: an open phone menu must not leave the page inert.
+    const wide = inject(DOCUMENT).defaultView?.matchMedia?.(MD_UP);
+    if (wide) {
+      const onChange = (event: MediaQueryListEvent) => {
+        if (event.matches) {
+          this.menuOpen.set(false);
+        }
+      };
+      wide.addEventListener('change', onChange);
+      this.destroyRef.onDestroy(() => wide.removeEventListener('change', onChange));
+    }
+  }
+
   protected toggleMenu(): void {
     this.menuOpen.update((open) => !open);
   }
 
   protected closeMenu(): void {
     this.menuOpen.set(false);
+  }
+
+  /**
+   * A navigation link: another page closes the menu (focus then goes to that page's heading); the
+   * page already on screen only closes it, so focus goes back to the menu button instead of being
+   * lost with the hidden link.
+   */
+  protected onNavLinkClick(link: string): void {
+    if (link === this.currentPath()) {
+      this.closeMenuAndRefocus();
+    } else {
+      this.closeMenu();
+    }
   }
 
   /** Escape closes the open mobile menu and returns focus to its button. */

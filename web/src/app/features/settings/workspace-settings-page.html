@@ -42,7 +42,7 @@
             type="text"
             formControlName="name"
             autocomplete="off"
-            class="block w-full max-w-sm rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+            class="block w-full max-w-sm rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.name) ? 'true' : null"
             [attr.aria-describedby]="showError(form.controls.name) ? 'workspace-name-error' : null"
           />
@@ -84,23 +84,21 @@
 
     @let state = members();
     @if (state.kind === 'loading') {
-      <p role="status" class="mt-4 text-sm text-slate-700">Loading members…</p>
+      <app-loading-state class="mt-4" text="Loading members…" />
     } @else if (state.kind === 'error') {
-      <div role="alert" class="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-        <p class="font-medium text-red-800">The members could not be loaded.</p>
-        <p class="mt-1 text-red-800">{{ state.message }}</p>
-        <button
-          type="button"
-          class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          (click)="retryMembers()"
-        >
-          Try again
-        </button>
-      </div>
+      <app-error-state
+        class="mt-4"
+        heading="The members could not be loaded."
+        [message]="state.message"
+        (retry)="retryMembers()"
+      />
     } @else if (state.members.length === 0) {
       <p class="mt-4 text-sm text-slate-700">No members to show.</p>
     } @else {
-      <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div
+        [appTableRegion]="'Members of ' + ws.name"
+        class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white"
+      >
         <table class="min-w-full divide-y divide-slate-200 text-sm">
           <caption class="sr-only">
             Members of

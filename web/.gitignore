@@ -41,3 +41,9 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Playwright (npm run e2e writes its artifacts to D:\meesho_saas_cache\e2e-artifacts; these are fallbacks)
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache

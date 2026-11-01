@@ -157,7 +157,7 @@ describe('ImportDetailPage', () => {
         .flush(errorBody('INTERNAL_ERROR', 'Boom.'), { status: 500, statusText: 'Error' });
       await stable();
       expect(textOf(host().querySelector('[role="alert"]'))).toContain(
-        'Boom. (request ID req-1)',
+        'Boom. (Reference: req-1)',
       );
 
       buttonByText('Try again')?.click();
@@ -382,6 +382,19 @@ describe('ImportDetailPage', () => {
       );
       expect(host().querySelector('[data-testid="sample-table"]')).toBeNull();
       expect(host().querySelector('[data-testid="sheets-table"]')).not.toBeNull();
+    });
+
+    it('names the sheet row of a CSV without a sheet name, so the row header is never empty', async () => {
+      const job = importDetail({ errorRows: 0 });
+      const csvSheet = { ...job.preview!.sheets[0], name: '' };
+      await render({ ...job, preview: { ...job.preview!, sheets: [csvSheet] } });
+
+      const rowHeader = host().querySelector(
+        '[data-testid="sheets-table"] tbody th[scope="row"]',
+      ) as HTMLElement;
+      // Seen: "—"; heard: "No sheet (CSV file)".
+      expect(rowHeader.querySelector('[aria-hidden="true"]')?.textContent).toBe('—');
+      expect(textOf(rowHeader.querySelector('.sr-only'))).toBe('No sheet (CSV file)');
     });
 
     it('a previewed file with no valid rows cannot be confirmed', async () => {

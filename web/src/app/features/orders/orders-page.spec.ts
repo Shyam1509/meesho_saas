@@ -476,7 +476,7 @@ describe('OrdersPage', () => {
       await stable();
       const alert = textOf(list().querySelector('[role="alert"]'));
       expect(alert).toContain('The orders could not be loaded.');
-      expect(alert).toContain('Boom. (request ID req-1)');
+      expect(alert).toContain('Boom. (Reference: req-1)');
       buttonByText('Try again')?.click();
       await stable();
       await flushList();

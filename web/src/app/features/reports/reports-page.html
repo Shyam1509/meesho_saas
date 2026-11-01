@@ -80,7 +80,7 @@
         </label>
         <select
           id="export-orders-settlement"
-          class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          class="mt-1 block rounded-md border border-slate-500 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900 max-w-full"
           (change)="setOrdersSettlement($event)"
         >
           <option value="" [selected]="ordersSettlement() === ''">All orders</option>
@@ -113,7 +113,7 @@
         </label>
         <select
           id="export-settlements-basis"
-          class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          class="mt-1 block rounded-md border border-slate-500 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900 max-w-full"
           (change)="setSettlementsBasis($event)"
         >
           <option value="payment_date" [selected]="settlementsBasis() === 'payment_date'">
@@ -143,7 +143,7 @@
         </label>
         <select
           id="export-settlements-match"
-          class="mt-1 block rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          class="mt-1 block rounded-md border border-slate-500 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900 max-w-full"
           (change)="setSettlementsMatch($event)"
         >
           <option value="" [selected]="settlementsMatch() === ''">All entries</option>
@@ -187,7 +187,7 @@
         </label>
         <select
           id="export-expenses-scope"
-          class="mt-1 block w-full max-w-xs rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
+          class="mt-1 block w-full max-w-xs rounded-md border border-slate-500 bg-white py-1.5 pr-8 pl-3 text-sm text-slate-900"
           (change)="setExpensesScope($event)"
         >
           <option value="account" [selected]="expensesScope() === 'account'">

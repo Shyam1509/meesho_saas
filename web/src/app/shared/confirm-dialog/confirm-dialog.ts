@@ -28,7 +28,7 @@ const FOCUSABLE =
   host: { class: 'contents' },
   template: `
     <div class="fixed inset-0 z-40 bg-slate-900/40" aria-hidden="true"></div>
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div
         #panel
         role="alertdialog"
@@ -36,7 +36,7 @@ const FOCUSABLE =
         [attr.aria-labelledby]="headingId"
         [attr.aria-describedby]="messageId"
         [attr.aria-busy]="pending()"
-        class="w-full max-w-md rounded-lg bg-white p-6 shadow-lg"
+        class="max-h-full w-full max-w-md overflow-y-auto overscroll-contain rounded-lg bg-white p-6 shadow-lg"
         (keydown)="onKeydown($event)"
       >
         <h2 [id]="headingId" class="text-base font-semibold text-slate-900">{{ heading() }}</h2>

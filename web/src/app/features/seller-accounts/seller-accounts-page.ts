@@ -18,6 +18,10 @@ import { SellerAccountsApiService } from '../../core/seller-accounts/seller-acco
 import { WorkspaceContextService } from '../../core/workspaces/workspace-context.service';
 import { ConfirmDialog } from '../../shared/confirm-dialog/confirm-dialog';
 import { SellerAccountForm } from './seller-account-form/seller-account-form';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { EmptyState } from '../../shared/empty-state/empty-state';
+import { TableRegion } from '../../shared/table-region/table-region';
 
 type ListState =
   | { kind: 'loading' }
@@ -37,7 +41,7 @@ interface EditorState {
  */
 @Component({
   selector: 'app-seller-accounts-page',
-  imports: [SellerAccountForm, ConfirmDialog],
+  imports: [SellerAccountForm, ConfirmDialog, LoadingState, ErrorState, EmptyState, TableRegion],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './seller-accounts-page.html',
 })

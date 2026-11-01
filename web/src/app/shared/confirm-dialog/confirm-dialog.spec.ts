@@ -118,6 +118,17 @@ describe('ConfirmDialog', () => {
     expect(dialog()).not.toBeNull();
   });
 
+  it('fits a small screen: full width up to its size, never taller than the viewport', async () => {
+    await open();
+
+    const classes = dialog()?.classList;
+    expect(classes).toContain('w-full');
+    expect(classes).toContain('max-w-md');
+    // A long message scrolls inside the dialog instead of pushing the buttons off screen.
+    expect(classes).toContain('max-h-full');
+    expect(classes).toContain('overflow-y-auto');
+  });
+
   it('shows an error inside the dialog', async () => {
     await open();
     fixture.componentInstance.error.set('Account not found.');

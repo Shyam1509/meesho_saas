@@ -15,7 +15,8 @@ export type DownloadState =
 @Component({
   selector: 'app-export-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block' },
+  // `min-w-0`: as a grid item it may shrink below its selects' longest option on a phone.
+  host: { class: 'block min-w-0' },
   template: `
     <section
       [attr.aria-labelledby]="cardId() + '-heading'"

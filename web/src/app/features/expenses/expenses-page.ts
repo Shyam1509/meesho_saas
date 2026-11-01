@@ -57,6 +57,10 @@ import {
   readPage,
 } from '../../shared/url-state/url-state';
 import { ExpenseFormDialog, ExpenseTarget } from './expense-form-dialog/expense-form-dialog';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { EmptyState } from '../../shared/empty-state/empty-state';
+import { TableRegion } from '../../shared/table-region/table-region';
 
 /** `account`: the selected seller account's expenses. `workspace`: workspace-wide ones. */
 export type ExpensesScope = 'account' | 'workspace';
@@ -140,6 +144,10 @@ export function readExpensesView(params: ParamMap): ExpensesView {
     DisplayDateTimePipe,
     ConfirmDialog,
     ExpenseFormDialog,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './expenses-page.html',

@@ -5,6 +5,7 @@ import { Amount } from '../../../shared/amount/amount';
 import { addDays } from '../../../shared/date-presets/date-presets';
 import { formatCount, formatDateRange, formatInr } from '../../../shared/format/format';
 import { CountPipe } from '../../../shared/format/format.pipes';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 export type TrendMetric =
   | 'settlementAmount'
@@ -131,7 +132,7 @@ export function axisTicks(values: readonly number[]): { lo: number; hi: number; 
  */
 @Component({
   selector: 'app-trend-chart',
-  imports: [Amount, CountPipe],
+  imports: [Amount, CountPipe, TableRegion],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   templateUrl: './trend-chart.html',

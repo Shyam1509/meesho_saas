@@ -17,7 +17,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
       novalidate
       (submit)="submit($event)"
     >
-      <div class="flex flex-wrap items-end gap-4">
+      <!-- Every field at most the bar's width: a long select option never makes a phone scroll. -->
+      <div class="flex flex-wrap items-end gap-4 *:max-w-full">
         <ng-content />
         <div class="flex flex-wrap items-center gap-2">
           <button

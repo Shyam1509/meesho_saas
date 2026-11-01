@@ -20,6 +20,8 @@ All commands run from `web/`. On this machine keep the npm cache on D: (`npm_con
 | Type-check | `npx tsc --noEmit -p tsconfig.app.json` (specs: `-p tsconfig.spec.json`) |
 | Unit tests (Vitest + jsdom, no browser) | `npx ng test --watch=false` |
 | Production build (`dist/web/browser`) | `npx ng build` |
+| Browser tests: journeys, axe scans, layout at 360/768/1280 px (Playwright + installed Chrome; own API on :3101 against the test DB, web on :4311; build `api/` first) | `npm run e2e` |
+| Lint the browser tests | `npm run lint:e2e` |
 
 The API base URL is the `API_BASE_URL` injection token (`src/app/core/api/api-base-url.ts`),
 default `/api/v1`. Proxy settings: `proxy.conf.json`.

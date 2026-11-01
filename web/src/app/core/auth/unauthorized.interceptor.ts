@@ -12,8 +12,10 @@ const SESSION_PROBE_PATHS = ['/auth/me', '/auth/login', '/auth/register'];
 
 /**
  * A 401 from any other API call means the session ended (expired, revoked, user disabled):
- * forget the user and their stored workspace choice, and go to the sign-in page, which brings them
- * back here afterwards.
+ * forget the user and their stored workspace choice, and go to the sign-in page, which says
+ * "Your session ended" and brings them back here afterwards. Only the first such 401 does this: a
+ * late one from a request that was already in flight finds nobody signed in and is left alone, so
+ * it cannot replace the return URL with the sign-in page's own.
  * The error still reaches the caller.
  */
 export const unauthorizedInterceptor: HttpInterceptorFn = (req, next) => {
@@ -28,9 +30,12 @@ export const unauthorizedInterceptor: HttpInterceptorFn = (req, next) => {
         error.status === 401 &&
         isSessionGuardedRequest(req.url, baseUrl)
       ) {
-        injector.get(AuthStateService).endSession();
-        const router = injector.get(Router);
-        void router.navigate(['/login'], { queryParams: returnUrlParams(router.url) });
+        const auth = injector.get(AuthStateService);
+        if (auth.isAuthenticated()) {
+          auth.expireSession();
+          const router = injector.get(Router);
+          void router.navigate(['/login'], { queryParams: returnUrlParams(router.url) });
+        }
       }
       return throwError(() => error);
     }),

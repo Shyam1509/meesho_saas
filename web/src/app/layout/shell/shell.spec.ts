@@ -36,12 +36,15 @@ class QuietPage {}
 
 const QUIET_URL = '/quiet-test-page';
 
-/** The app's routes, plus {@link QuietPage} under the shell. */
+/** The app's routes, plus {@link QuietPage} under the shell (before its "not found" wildcard). */
 const TEST_ROUTES: Routes = routes.map((route) =>
   route.component === Shell
     ? {
         ...route,
-        children: [...(route.children ?? []), { path: QUIET_URL.slice(1), component: QuietPage }],
+        children: [
+          { path: QUIET_URL.slice(1), component: QuietPage },
+          ...(route.children ?? []),
+        ],
       }
     : route,
 );
@@ -145,6 +148,37 @@ describe('Shell', () => {
       expect(document.activeElement).toBe(menuButton());
     });
 
+    it('while the phone menu is open the page behind it is inert (no Tab stops under the menu)', () => {
+      const main = host().querySelector('main#main-content') as HTMLElement;
+      expect(main.hasAttribute('inert')).toBe(false);
+
+      menuButton().click();
+      detectChanges();
+      expect(main.hasAttribute('inert')).toBe(true);
+
+      menuButton().click();
+      detectChanges();
+      expect(main.hasAttribute('inert')).toBe(false);
+    });
+
+    it('the link of the page on screen closes the menu and gives focus back to the menu button', async () => {
+      // The quiet page has no nav item: go to one that does, then pick it again from the menu.
+      await harness.navigateByUrl('/settings');
+      httpTesting.expectOne('/api/v1/workspaces/10/members').flush({ items: [] });
+      await harness.fixture.whenStable();
+      menuButton().click();
+      detectChanges();
+      const settingsLink = navLinks().find((a) => a.textContent?.trim() === 'Workspace settings');
+      settingsLink?.focus();
+      settingsLink?.click();
+      await harness.fixture.whenStable();
+
+      expect(menuButton().getAttribute('aria-expanded')).toBe('false');
+      expect(nav().classList).toContain('hidden');
+      expect(document.activeElement).toBe(menuButton());
+      expect(TestBed.inject(Router).url).toBe('/settings');
+    });
+
     it('skip link moves focus to the main content', () => {
       const skipLink = host().querySelector('a[href="#main-content"]') as HTMLAnchorElement;
       expect(skipLink.textContent?.trim()).toBe('Skip to main content');
@@ -196,6 +230,40 @@ describe('Shell', () => {
       expect(nowCurrent.map((a) => a.textContent?.trim())).toEqual([
         'Settlements & reconciliation',
       ]);
+    });
+  });
+
+  describe('growing to the md breakpoint', () => {
+    let listener: ((event: MediaQueryListEvent) => void) | null = null;
+    const original = window.matchMedia;
+
+    beforeEach(async () => {
+      listener = null;
+      window.matchMedia = vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: (_type: string, fn: (event: MediaQueryListEvent) => void) =>
+          (listener = fn),
+        removeEventListener: () => (listener = null),
+      })) as unknown as typeof window.matchMedia;
+      await createHarness();
+    });
+
+    afterEach(() => {
+      window.matchMedia = original;
+    });
+
+    it('closes the open phone menu, so a desktop window never stays inert', () => {
+      expect(window.matchMedia).toHaveBeenCalledWith('(min-width: 48rem)');
+      menuButton().click();
+      detectChanges();
+      expect(host().querySelector('main')?.hasAttribute('inert')).toBe(true);
+
+      listener?.({ matches: true } as MediaQueryListEvent);
+      detectChanges();
+
+      expect(menuButton().getAttribute('aria-expanded')).toBe('false');
+      expect(host().querySelector('main')?.hasAttribute('inert')).toBe(false);
     });
   });
 
@@ -263,7 +331,7 @@ describe('Shell', () => {
       await harness.fixture.whenStable();
 
       expect(textOf(host().querySelector('[role="alert"]'))).toBe(
-        'Sign-out failed: Could not reach the server. Check your connection and try again.',
+        "Sign-out failed: Can't reach the server. Check your connection and try again.",
       );
       expect(auth.isAuthenticated()).toBe(true);
       expect(TestBed.inject(Router).url).toBe(QUIET_URL);

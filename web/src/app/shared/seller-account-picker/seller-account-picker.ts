@@ -3,6 +3,9 @@ import { RouterLink } from '@angular/router';
 
 import { SelectedSellerAccountService } from '../../core/seller-accounts/selected-seller-account.service';
 import { WorkspaceContextService } from '../../core/workspaces/workspace-context.service';
+import { LoadingState } from '../loading-state/loading-state';
+import { ErrorState } from '../error-state/error-state';
+import { EmptyState } from '../empty-state/empty-state';
 
 /**
  * "Seller account" select for the account-scoped pages, backed by the shared
@@ -13,49 +16,39 @@ import { WorkspaceContextService } from '../../core/workspaces/workspace-context
  */
 @Component({
   selector: 'app-seller-account-picker',
-  imports: [RouterLink],
+  imports: [RouterLink, LoadingState, ErrorState, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
     @let state = selection.state();
     <div [attr.aria-busy]="state.kind === 'loading'" [attr.data-accounts-state]="state.kind">
       @if (state.kind === 'loading') {
-        <p role="status" class="text-sm text-slate-700">Loading seller accounts…</p>
+        <app-loading-state text="Loading seller accounts…" />
       } @else if (state.kind === 'no-workspace') {
         <p class="text-sm text-slate-700">{{ noWorkspaceText() }}</p>
       } @else if (state.kind === 'error') {
-        <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-          <p class="font-medium text-red-800">The seller accounts could not be loaded.</p>
-          <p class="mt-1 text-red-800">{{ state.message }}</p>
-          <button
-            type="button"
-            class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            (click)="selection.refresh()"
-          >
-            Try again
-          </button>
-        </div>
+        <app-error-state
+          heading="The seller accounts could not be loaded."
+          [message]="state.message"
+          (retry)="selection.refresh()"
+        />
       } @else if (state.accounts.length === 0) {
-        <div
-          class="max-w-2xl rounded-lg border border-dashed border-slate-300 bg-white p-6"
-          data-testid="no-accounts"
-        >
-          <p class="text-sm font-medium text-slate-900">No active seller accounts.</p>
-          <p class="mt-1 text-sm text-slate-600">
-            {{ purpose() }}
-            @if (isOwner()) {
-              Add one (or re-enable a disabled one) first.
-            } @else {
-              Ask an owner of this workspace to add one.
-            }
-          </p>
+        <app-empty-state heading="No active seller accounts." data-testid="no-accounts">
+          {{ purpose() }}
+          @if (isOwner()) {
+            Add one (or re-enable a disabled one) first.
+          } @else {
+            Ask an owner of this workspace to add one.
+          }
+
           <a
+            emptyStateAction
             routerLink="/seller-accounts"
             class="mt-3 inline-block rounded-sm text-sm font-medium text-accent-700 underline hover:text-accent-800"
           >
             Go to Seller accounts
           </a>
-        </div>
+        </app-empty-state>
       } @else {
         <div class="max-w-sm">
           <label [for]="inputId()" class="block text-sm font-medium text-slate-800">
@@ -63,7 +56,7 @@ import { WorkspaceContextService } from '../../core/workspaces/workspace-context
           </label>
           <select
             [id]="inputId()"
-            class="mt-1 block w-full rounded-md border border-slate-300 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
+            class="mt-1 block w-full rounded-md border border-slate-500 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
             (change)="onChange($event)"
           >
             @for (account of state.accounts; track account.id) {

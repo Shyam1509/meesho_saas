@@ -5,26 +5,22 @@
   data-testid="import-history"
 >
   @if (view.kind === 'loading') {
-    <p role="status" class="text-sm text-slate-700">Loading the import history…</p>
+    <app-loading-state text="Loading the import history…" />
   } @else if (view.kind === 'error') {
-    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-      <p class="font-medium text-red-800">The import history could not be loaded.</p>
-      <p class="mt-1 text-red-800">{{ view.message }}</p>
-      <button
-        type="button"
-        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        (click)="retry()"
-      >
-        Try again
-      </button>
-    </div>
+    <app-error-state
+      heading="The import history could not be loaded."
+      [message]="view.message"
+      (retry)="retry()"
+    />
   } @else if (view.result.total === 0 && view.result.items.length === 0) {
-    <div class="max-w-2xl rounded-lg border border-dashed border-slate-300 bg-white p-6">
-      <p class="text-sm font-medium text-slate-900">No imports for this account yet.</p>
-      <p class="mt-1 text-sm text-slate-600">Files you upload appear here, newest first.</p>
-    </div>
+    <app-empty-state heading="No imports for this account yet.">
+      Files you upload appear here, newest first.
+    </app-empty-state>
   } @else {
-    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div
+      [appTableRegion]="'Imports for ' + accountName()"
+      class="overflow-x-auto rounded-lg border border-slate-200 bg-white"
+    >
       <table class="min-w-full divide-y divide-slate-200 text-sm">
         <caption class="sr-only">
           Imports for {{ accountName() }}, newest first

@@ -13,6 +13,7 @@ import { Amount } from '../../../shared/amount/amount';
 import { CountPipe } from '../../../shared/format/format.pipes';
 import { LinkContext, settlementsLink, settlementsNarrowedByStatus } from '../dashboard-links';
 import { DrillLink } from '../drill-link/drill-link';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 /**
  * The settlement amount by entry type (each type links to its entries), the informational
@@ -20,13 +21,16 @@ import { DrillLink } from '../drill-link/drill-link';
  */
 @Component({
   selector: 'app-settlement-breakdown',
-  imports: [Amount, CountPipe, DrillLink],
+  imports: [Amount, CountPipe, DrillLink, TableRegion],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
     @let s = settlements();
     <div class="grid gap-6 lg:grid-cols-2">
-      <div class="overflow-x-auto">
+      <div
+        appTableRegion="Settlement amount by entry type"
+        class="overflow-x-auto"
+      >
         <table class="min-w-full text-sm" data-testid="by-type-table">
           <caption class="pb-2 text-left text-sm font-semibold text-slate-900">
             By entry type
@@ -82,7 +86,10 @@ import { DrillLink } from '../drill-link/drill-link';
       </div>
 
       <div class="space-y-6">
-        <div class="overflow-x-auto">
+        <div
+          appTableRegion="Settlement components (as reported)"
+          class="overflow-x-auto"
+        >
           <table class="min-w-full text-sm" data-testid="components-table">
             <caption class="pb-1 text-left">
               <span class="block text-sm font-semibold text-slate-900">Components (as reported)</span>
@@ -102,7 +109,10 @@ import { DrillLink } from '../drill-link/drill-link';
             </tbody>
           </table>
         </div>
-        <div class="overflow-x-auto">
+        <div
+          appTableRegion="TCS and TDS"
+          class="overflow-x-auto"
+        >
           <table class="min-w-full text-sm" data-testid="tax-table">
             <caption class="pb-1 text-left">
               <span class="block text-sm font-semibold text-slate-900">TCS and TDS</span>

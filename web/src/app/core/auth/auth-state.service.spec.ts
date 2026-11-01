@@ -75,7 +75,7 @@ describe('AuthStateService', () => {
       await expect(loaded).resolves.toBeUndefined();
 
       expect(auth.status()).toBe('anonymous');
-      expect(auth.sessionCheckError()).toContain('Could not reach the server');
+      expect(auth.sessionCheckError()).toContain("Can't reach the server");
       // The API may just be unreachable: nothing says the session ended.
       expect(localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)).toBe('20');
     });
@@ -188,6 +188,34 @@ describe('AuthStateService', () => {
       expect(auth.user()).toBeNull();
       expect(auth.workspaces()).toEqual([]);
       expect(localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)).toBeNull();
+    });
+  });
+
+  describe('expireSession (a 401 while the app is in use)', () => {
+    it('signs out, forgets the stored workspace and remembers that the session ended', () => {
+      auth.setSession(ME_TWO_WORKSPACES);
+      localStorage.setItem(SELECTED_WORKSPACE_STORAGE_KEY, '20');
+      expect(auth.sessionExpired()).toBe(false);
+
+      auth.expireSession();
+
+      expect(auth.status()).toBe('anonymous');
+      expect(auth.user()).toBeNull();
+      expect(localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)).toBeNull();
+      expect(auth.sessionExpired()).toBe(true);
+    });
+
+    it('does not claim a session ended when nobody was signed in', () => {
+      auth.clear();
+      auth.expireSession();
+      expect(auth.sessionExpired()).toBe(false);
+    });
+
+    it('forgets the notice once someone signs in again', () => {
+      auth.setSession(ME_TWO_WORKSPACES);
+      auth.expireSession();
+      auth.setSession(ME_TWO_WORKSPACES);
+      expect(auth.sessionExpired()).toBe(false);
     });
   });
 

@@ -33,7 +33,7 @@
         type="text"
         formControlName="displayName"
         autocomplete="off"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.displayName) ? 'true' : null"
         [attr.aria-describedby]="
           showError(form.controls.displayName) ? idPrefix + '-display-name-error' : null
@@ -56,7 +56,7 @@
         formControlName="meeshoSupplierId"
         autocomplete="off"
         spellcheck="false"
-        class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
+        class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
         [attr.aria-invalid]="showError(form.controls.meeshoSupplierId) ? 'true' : null"
         [attr.aria-describedby]="
           showError(form.controls.meeshoSupplierId)

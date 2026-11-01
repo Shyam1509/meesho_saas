@@ -23,6 +23,10 @@ import { MISSING } from '../../../shared/format/format';
 import { CountPipe, DisplayDateTimePipe, FileSizePipe } from '../../../shared/format/format.pipes';
 import { Pager } from '../../../shared/pager/pager';
 import { ImportStatusBadge } from '../import-status-badge/import-status-badge';
+import { LoadingState } from '../../../shared/loading-state/loading-state';
+import { ErrorState } from '../../../shared/error-state/error-state';
+import { EmptyState } from '../../../shared/empty-state/empty-state';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 type HistoryState =
   | { kind: 'loading'; accountId: string }
@@ -35,7 +39,18 @@ type HistoryState =
  */
 @Component({
   selector: 'app-import-history',
-  imports: [RouterLink, CountPipe, DisplayDateTimePipe, FileSizePipe, ImportStatusBadge, Pager],
+  imports: [
+    RouterLink,
+    CountPipe,
+    DisplayDateTimePipe,
+    FileSizePipe,
+    ImportStatusBadge,
+    Pager,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    TableRegion,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   templateUrl: './import-history.html',

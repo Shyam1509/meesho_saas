@@ -28,7 +28,8 @@
             />
           }
         </svg>
-        Menu
+        <!-- Icon only on the narrowest screens, so the header fits 360px with a workspace switcher. -->
+        <span class="max-sm:sr-only">Menu</span>
       </button>
 
       <a
@@ -47,7 +48,7 @@
               </label>
               <select
                 id="workspace-switcher"
-                class="max-w-32 rounded-md border border-slate-300 bg-white py-1.5 pr-8 pl-2 text-sm text-slate-900 sm:max-w-48"
+                class="max-w-32 rounded-md border border-slate-500 bg-white py-1.5 pr-8 pl-2 text-sm text-slate-900 sm:max-w-48"
                 (change)="selectWorkspace($event)"
               >
                 @for (workspace of workspaces(); track workspace.id) {
@@ -100,6 +101,7 @@
     <div
       role="alert"
       class="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 sm:px-6"
+      [attr.inert]="menuOpen() ? '' : null"
     >
       {{ message }}
     </div>
@@ -119,7 +121,7 @@
               [routerLink]="item.link"
               [class.is-active]="item.current()"
               [attr.aria-current]="item.current() ? 'page' : null"
-              (click)="closeMenu()"
+              (click)="onNavLinkClick(item.link)"
               class="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 aria-[current=page]:bg-accent-50 aria-[current=page]:font-semibold aria-[current=page]:text-accent-800"
             >
               {{ item.label }}
@@ -140,10 +142,12 @@
       }
     </nav>
 
+    <!-- Behind the open phone menu: out of the Tab order until the menu closes. -->
     <main
       #main
       id="main-content"
       tabindex="-1"
+      [attr.inert]="menuOpen() ? '' : null"
       class="min-w-0 flex-1 px-4 py-6 focus-visible:outline-none sm:px-6 lg:px-8"
     >
       <router-outlet />

@@ -31,6 +31,9 @@ import {
   requiredTrimmed,
   showError,
 } from '../../shared/forms/form-helpers';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { TableRegion } from '../../shared/table-region/table-region';
 
 type MembersState =
   | { kind: 'loading' }
@@ -43,7 +46,7 @@ type MembersState =
  */
 @Component({
   selector: 'app-workspace-settings-page',
-  imports: [ReactiveFormsModule, DatePipe],
+  imports: [ReactiveFormsModule, DatePipe, LoadingState, ErrorState, TableRegion],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-settings-page.html',
 })

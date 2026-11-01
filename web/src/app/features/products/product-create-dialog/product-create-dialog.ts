@@ -22,7 +22,7 @@ import {
   ProductDetail,
 } from '../../../core/products/product.models';
 import { ProductsApiService } from '../../../core/products/products-api.service';
-import { Dialog } from '../../../shared/dialog/dialog';
+import { DIALOG_ACTIONS_CLASS, Dialog } from '../../../shared/dialog/dialog';
 import {
   applyServerFieldErrors,
   errorMessage,
@@ -64,7 +64,7 @@ let nextId = 0;
         [formGroup]="form"
         (ngSubmit)="submit()"
         novalidate
-        class="mt-4 grid gap-4"
+        class="mt-4 flex flex-col gap-4"
         [attr.aria-busy]="submitting()"
       >
         <div>
@@ -78,7 +78,7 @@ let nextId = 0;
             autocomplete="off"
             spellcheck="false"
             data-autofocus
-            class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
+            class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.sku) ? 'true' : null"
             [attr.aria-describedby]="
               showError(form.controls.sku)
@@ -105,7 +105,7 @@ let nextId = 0;
             type="text"
             formControlName="name"
             autocomplete="off"
-            class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+            class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.name) ? 'true' : null"
             [attr.aria-describedby]="showError(form.controls.name) ? idPrefix + '-name-error' : null"
           />
@@ -126,7 +126,7 @@ let nextId = 0;
             formControlName="catalogId"
             autocomplete="off"
             spellcheck="false"
-            class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
+            class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 font-mono text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.catalogId) ? 'true' : null"
             [attr.aria-describedby]="
               showError(form.controls.catalogId) ? idPrefix + '-catalog-error' : null
@@ -139,7 +139,7 @@ let nextId = 0;
           }
         </div>
 
-        <div class="flex flex-wrap gap-3">
+        <div [class]="actionsClass">
           <button
             type="submit"
             class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
@@ -172,6 +172,7 @@ export class ProductCreateDialog {
   private readonly errorAlert = viewChild<ElementRef<HTMLElement>>('errorAlert');
 
   protected readonly idPrefix = `product-create-${++nextId}`;
+  protected readonly actionsClass = DIALOG_ACTIONS_CLASS;
   protected readonly form = inject(NonNullableFormBuilder).group({
     sku: ['', [requiredTrimmed, maxLengthTrimmed(PRODUCT_SKU_MAX_LENGTH)]],
     name: ['', [maxLengthTrimmed(PRODUCT_NAME_MAX_LENGTH)]],

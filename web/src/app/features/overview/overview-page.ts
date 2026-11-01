@@ -67,6 +67,10 @@ import {
 } from './overview-view';
 import { SettlementBreakdown } from './settlement-breakdown/settlement-breakdown';
 import { TrendChart } from './trend-chart/trend-chart';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { EmptyState } from '../../shared/empty-state/empty-state';
+import { TableRegion } from '../../shared/table-region/table-region';
 
 interface Target {
   kind: 'account' | 'workspace';
@@ -111,6 +115,10 @@ const RANGE_OPTIONS: readonly { id: OverviewRange; label: string }[] = [
     SellerAccountPicker,
     SettlementBreakdown,
     TrendChart,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './overview-page.html',

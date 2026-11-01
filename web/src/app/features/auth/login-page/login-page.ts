@@ -75,6 +75,8 @@ export class LoginPage {
   protected readonly serverError = signal<string | null>(null);
   protected readonly registrationEnabled = this.auth.registrationEnabled;
   protected readonly sessionCheckError = this.auth.sessionCheckError;
+  /** The session ended while the app was in use (the 401 interceptor sent them here). */
+  protected readonly sessionExpired = this.auth.sessionExpired;
   protected readonly safeReturn = computed(() => safeReturnUrl(this.returnUrl()));
   protected readonly showError = showError;
   protected readonly errorMessage = errorMessage;

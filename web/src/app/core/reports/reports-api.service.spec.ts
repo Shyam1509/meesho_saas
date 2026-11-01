@@ -147,10 +147,21 @@ describe('ReportsApiService', () => {
     const bad = firstValueFrom(service.ordersCsv('100'));
     httpTesting
       .expectOne('/api/v1/accounts/100/reports/orders.csv')
-      .flush(new Blob(['<html>Bad gateway</html>']), { status: 502, statusText: 'Bad Gateway' });
+      .flush(new Blob(['<html>Oops</html>']), { status: 500, statusText: 'Server Error' });
     const badError = (await bad.catch((e: unknown) => e)) as ApiError;
-    expect(badError.status).toBe(502);
-    expect(badError.message).toBe('The server returned an unexpected response (HTTP 502).');
+    expect(badError.status).toBe(500);
+    expect(badError.message).toBe('The server returned an unexpected response (HTTP 500).');
+
+    // A proxy's 502 page (the API is down) reads as "Can't reach the server".
+    const gateway = firstValueFrom(service.ordersCsv('100'));
+    httpTesting
+      .expectOne('/api/v1/accounts/100/reports/orders.csv')
+      .flush(new Blob(['<html>Bad gateway</html>']), { status: 502, statusText: 'Bad Gateway' });
+    const gatewayError = (await gateway.catch((e: unknown) => e)) as ApiError;
+    expect(gatewayError.status).toBe(502);
+    expect(gatewayError.message).toBe(
+      "Can't reach the server. Check your connection and try again.",
+    );
 
     const offline = firstValueFrom(service.ordersCsv('100'));
     httpTesting.expectOne('/api/v1/accounts/100/reports/orders.csv').error(new ProgressEvent('error'));

@@ -23,7 +23,7 @@ import {
   UNIT_COST_LIMIT,
 } from '../../../core/products/product.models';
 import { ProductsApiService } from '../../../core/products/products-api.service';
-import { Dialog } from '../../../shared/dialog/dialog';
+import { DIALOG_ACTIONS_CLASS, Dialog } from '../../../shared/dialog/dialog';
 import { dateStringInTimeZone, formatDate } from '../../../shared/format/format';
 import {
   applyServerFieldErrors,
@@ -80,7 +80,7 @@ export function latestCostDate(now: Date = new Date()): string {
         [formGroup]="form"
         (ngSubmit)="submit()"
         novalidate
-        class="mt-4 grid gap-4"
+        class="mt-4 flex flex-col gap-4"
         [attr.aria-busy]="submitting()"
       >
         <div>
@@ -93,7 +93,7 @@ export function latestCostDate(now: Date = new Date()): string {
             formControlName="effectiveFrom"
             data-autofocus
             [max]="maxDate"
-            class="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+            class="mt-1 block rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.effectiveFrom) ? 'true' : null"
             [attr.aria-describedby]="
               showError(form.controls.effectiveFrom)
@@ -122,7 +122,7 @@ export function latestCostDate(now: Date = new Date()): string {
             inputmode="decimal"
             formControlName="unitCost"
             autocomplete="off"
-            class="mt-1 block w-48 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 tabular-nums aria-invalid:border-red-600"
+            class="mt-1 block w-48 rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 tabular-nums aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.unitCost) ? 'true' : null"
             [attr.aria-describedby]="
               showError(form.controls.unitCost)
@@ -150,7 +150,7 @@ export function latestCostDate(now: Date = new Date()): string {
             type="text"
             formControlName="note"
             autocomplete="off"
-            class="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+            class="mt-1 block w-full rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.note) ? 'true' : null"
             [attr.aria-describedby]="showError(form.controls.note) ? idPrefix + '-note-error' : null"
           />
@@ -161,7 +161,7 @@ export function latestCostDate(now: Date = new Date()): string {
           }
         </div>
 
-        <div class="flex flex-wrap gap-3">
+        <div [class]="actionsClass">
           <button
             type="submit"
             class="rounded-md bg-accent-700 px-3 py-2 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
@@ -195,6 +195,7 @@ export class CostEntryDialog {
   private readonly errorAlert = viewChild<ElementRef<HTMLElement>>('errorAlert');
 
   protected readonly idPrefix = `cost-entry-${++nextId}`;
+  protected readonly actionsClass = DIALOG_ACTIONS_CLASS;
   protected readonly maxDaysAhead = COST_MAX_DAYS_AHEAD;
   protected readonly maxDate = latestCostDate();
   protected readonly form = inject(NonNullableFormBuilder).group({

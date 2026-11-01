@@ -101,7 +101,14 @@ export const routes: Routes = [
             (m) => m.WorkspaceSettingsPage,
           ),
       },
+      // Last: any other address is a "Page not found" inside the shell (signed-out visitors are
+      // sent to sign in first, and come back here afterwards).
+      {
+        path: '**',
+        title: 'Page not found',
+        loadComponent: () =>
+          import('./features/not-found/not-found-page').then((m) => m.NotFoundPage),
+      },
     ],
   },
-  { path: '**', redirectTo: 'overview' },
 ];

@@ -20,6 +20,7 @@ import {
 } from '../../../shared/format/format.pipes';
 import { ImportErrorsTable } from '../import-errors-table/import-errors-table';
 import { ImportStatusBadge } from '../import-status-badge/import-status-badge';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 interface SampleGroup {
   key: string;
@@ -43,6 +44,7 @@ interface SampleGroup {
     FileSizePipe,
     ImportErrorsTable,
     ImportStatusBadge,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },

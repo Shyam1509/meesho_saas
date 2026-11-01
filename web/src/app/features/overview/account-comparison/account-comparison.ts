@@ -17,6 +17,7 @@ import {
 } from '../dashboard-links';
 import { DrillLink } from '../drill-link/drill-link';
 import { overviewParams, OverviewView } from '../overview-view';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 export type ComparisonKey =
   | 'displayName'
@@ -98,7 +99,7 @@ export function sortComparison(
  */
 @Component({
   selector: 'app-account-comparison',
-  imports: [RouterLink, Amount, CountPipe, DrillLink, SortButton],
+  imports: [RouterLink, Amount, CountPipe, DrillLink, SortButton, TableRegion],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   templateUrl: './account-comparison.html',

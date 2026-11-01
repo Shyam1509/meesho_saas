@@ -35,7 +35,7 @@
         data-autofocus
         [attr.maxlength]="maxLength"
         aria-describedby="match-order-q-hint"
-        class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+        class="min-w-0 flex-1 rounded-md border border-slate-500 bg-white px-3 py-1.5 text-sm text-slate-900"
         [value]="query()"
         (input)="query.set(inputValue($event))"
       />
@@ -69,7 +69,10 @@
         <legend class="text-sm font-medium text-slate-800">
           Orders ({{ found.value.items.length }} of {{ found.value.total }})
         </legend>
-        <ul class="mt-2 max-h-64 divide-y divide-slate-200 overflow-y-auto rounded-md border border-slate-200">
+        <!-- Its own scroll area only from sm up: on a phone the dialog body scrolls (no nesting). -->
+        <ul
+          class="mt-2 divide-y divide-slate-200 rounded-md border border-slate-200 sm:max-h-64 sm:overflow-y-auto"
+        >
           @for (order of found.value.items; track order.id) {
             <li class="flex items-start gap-3 px-3 py-2">
               <input
@@ -123,7 +126,7 @@
     </div>
   }
 
-  <div class="mt-6 flex flex-wrap justify-end gap-3">
+  <div [class]="actionsClass">
     <button
       type="button"
       class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"

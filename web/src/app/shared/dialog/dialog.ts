@@ -13,6 +13,14 @@ import {
 
 let nextId = 0;
 
+/**
+ * Classes for the action buttons row at the end of a dialog's content: it sticks to the bottom of
+ * the scrolling area (so Save / Cancel stay reachable on a phone) across the content's full width.
+ * Its parent must be a block or flex container, not a grid (a grid cell would hold it in place).
+ */
+export const DIALOG_ACTIONS_CLASS =
+  'sticky bottom-0 -mx-4 mt-2 flex flex-wrap gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:-mx-6 sm:px-6';
+
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -21,6 +29,10 @@ const FOCUSABLE =
  * no (`ConfirmDialog` covers that). Render it with `@if`. On open, focus goes to the element marked
  * `data-autofocus`, else the first focusable one; Tab stays inside; Escape or "Close" (unless
  * `busy`) emits `closed`; on close, focus returns to the element that had it before.
+ *
+ * It fits small screens: full width up to its `width`, never taller than the viewport, the header
+ * always visible and the content scrolling inside. Give the row of action buttons at the end of the
+ * content {@link DIALOG_ACTIONS_CLASS} so it stays in view while a long form scrolls.
  */
 @Component({
   selector: 'app-dialog',
@@ -28,7 +40,7 @@ const FOCUSABLE =
   host: { class: 'contents' },
   template: `
     <div class="fixed inset-0 z-40 bg-slate-900/40" aria-hidden="true"></div>
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div
         #panel
         role="dialog"
@@ -40,7 +52,9 @@ const FOCUSABLE =
         [class.max-w-3xl]="width() === 'wide'"
         (keydown)="onKeydown($event)"
       >
-        <div class="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+        <div
+          class="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-6"
+        >
           <h2 [id]="headingId" class="text-base font-semibold text-slate-900">{{ heading() }}</h2>
           <button
             type="button"
@@ -51,8 +65,11 @@ const FOCUSABLE =
             Close<span class="sr-only"> dialog</span>
           </button>
         </div>
-        <div class="overflow-y-auto px-6 py-4">
-          <ng-content />
+        <!-- scroll-pb-20: a field focused by Tab scrolls clear of the sticky actions row. -->
+        <div class="min-h-0 scroll-pb-20 overflow-y-auto overscroll-contain" data-dialog-body>
+          <div class="px-4 pt-4 sm:px-6">
+            <ng-content />
+          </div>
         </div>
       </div>
     </div>

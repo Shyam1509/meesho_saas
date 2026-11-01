@@ -137,7 +137,10 @@
       Check that the columns you expect were recognised. Ignored columns are not read or stored.
     </p>
     @if (usedSheets().length > 0) {
-      <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div
+        appTableRegion="Sheets read from the file"
+        class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white"
+      >
         <table class="min-w-full divide-y divide-slate-200 text-sm" data-testid="sheets-table">
           <caption class="sr-only">
             Sheets read from the file
@@ -168,7 +171,13 @@
             @for (sheet of usedSheets(); track sheet.name) {
               <tr>
                 <th scope="row" class="px-4 py-2.5 text-left align-top font-medium text-slate-900">
-                  {{ sheet.name }}
+                  @if (sheet.name) {
+                    {{ sheet.name }}
+                  } @else {
+                    <!-- A CSV file has no sheets: the row header still needs a name. -->
+                    <span aria-hidden="true">{{ missing }}</span
+                    ><span class="sr-only">No sheet (CSV file)</span>
+                  }
                 </th>
                 <td class="px-4 py-2.5 align-top text-slate-700">{{ sheetUse(sheet) }}</td>
                 <td class="px-4 py-2.5 text-right align-top tabular-nums">
@@ -213,6 +222,7 @@
       <p class="mt-1 text-sm text-slate-600">The first valid rows, as they will be imported.</p>
       @for (group of sampleGroups(); track group.key) {
         <div
+          [appTableRegion]="group.sheetName ? 'Sample rows from ' + group.sheetName : 'Sample rows'"
           class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white"
           data-testid="sample-table"
         >

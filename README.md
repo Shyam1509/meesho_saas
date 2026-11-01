@@ -21,7 +21,7 @@ and profit are never mixed up.
 | 5 | Orders, settlements, reconciliation | Done (matching by sub order no.; supersession deferred) |
 | 6 | Products, effective-dated costs, expenses | Done (one product per SKU; costs per unit from a date) |
 | 7 | Dashboard, account comparison, CSV reports | Done (formulas documented in `api/README.md`) |
-| 8 | UX hardening | Not started |
+| 8 | UX hardening | Done (360 px+, WCAG 2.2 AA checked with axe, Playwright end-to-end tests) |
 | 9 | Release readiness | Not started |
 
 What works today:
@@ -211,6 +211,8 @@ not end in `_test`.
 | `web/` | `npx tsc --noEmit -p tsconfig.app.json` | Type-check |
 | `web/` | `npx ng test --watch=false` | Unit tests (Vitest + jsdom, no browser needed) |
 | `web/` | `npx ng build` | Production build to `web/dist/web/browser` |
+| `web/` | `npm run e2e` | Browser tests (Playwright, your installed Chrome): every main journey, an axe accessibility scan of every page at desktop and phone width, and no sideways scrolling at 360/768/1280 px. Starts its own API (port 3101, test database) and web server (port 4311) and deletes its data afterwards. Build the API first (`npm run build` in `api/`); don't run it at the same time as the API's `test:db` / `test:e2e`. Screenshots and reports go to `D:\meesho_saas_cache\e2e-artifacts` (outside the repo). |
+| `web/` | `npm run lint:e2e` | ESLint for the browser tests |
 
 ## API documentation
 
@@ -240,6 +242,9 @@ transaction writes orders, status events and settlement entries → summary. Not
 
 ## Limitations (current)
 
+- Usability: works from 360 px wide and passes automated WCAG 2.2 AA checks (axe) on every page; on very narrow
+  screens the trend chart's axis labels get small (its data table is the readable alternative). No dark mode. No
+  manual screen-reader test with NVDA/VoiceOver has been done yet.
 - The estimated contribution is only as good as the inputs: order value's unit-vs-line meaning is unconfirmed, the
   cancelled/RTO/returned check is a keyword match on Meesho's raw status (CANCEL, RTO, RETURN) until real files
   confirm the statuses, and there is no bank-payout evidence yet. Export and import limits are kept in memory

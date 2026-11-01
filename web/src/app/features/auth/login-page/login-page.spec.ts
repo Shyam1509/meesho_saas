@@ -194,9 +194,54 @@ describe('LoginPage', () => {
       await fixture.whenStable();
 
       expect(textOf(alert())).toBe(
-        'Could not reach the server. Check your connection and try again.',
+        "Can't reach the server. Check your connection and try again.",
       );
     });
+  });
+
+  describe('after the session ended while the app was in use', () => {
+    const notice = () => host().querySelector('[data-testid="session-expired"]');
+
+    beforeEach(() => {
+      const auth = TestBed.inject(AuthStateService);
+      auth.setSession(ME_OWNER);
+      auth.expireSession();
+    });
+
+    it('says the session ended and that they will be back on their page', async () => {
+      await render();
+      fixture.componentRef.setInput('returnUrl', '/orders?page=2');
+      await fixture.whenStable();
+
+      expect(notice()?.getAttribute('role')).toBe('alert');
+      expect(textOf(notice())).toBe(
+        'Your session ended. Sign in again to continue — you will be back on the page you were using.',
+      );
+    });
+
+    it('leaves out the return promise without a (safe) returnUrl', async () => {
+      await render();
+      fixture.componentRef.setInput('returnUrl', 'https://evil.example');
+      await fixture.whenStable();
+      expect(textOf(notice())).toBe('Your session ended. Sign in again to continue.');
+    });
+
+    it('signing in goes back to the page and forgets the notice', async () => {
+      await render();
+      fixture.componentRef.setInput('returnUrl', '/orders?page=2');
+      await fillAndSubmit('asha@example.com', 'correct horse battery');
+      httpTesting.expectOne('/api/v1/auth/login').flush(ME_OWNER);
+
+      await vi.waitFor(() => expect(router.url).toBe('/orders?page=2'));
+      expect(TestBed.inject(AuthStateService).sessionExpired()).toBe(false);
+      await fixture.whenStable();
+      expect(notice()).toBeNull();
+    });
+  });
+
+  it('shows no session notice on a normal visit', async () => {
+    await render();
+    expect(host().querySelector('[data-testid="session-expired"]')).toBeNull();
   });
 
   it('says so when the startup session check could not reach the API', async () => {

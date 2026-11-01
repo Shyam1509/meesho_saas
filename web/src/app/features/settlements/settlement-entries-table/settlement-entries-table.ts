@@ -11,6 +11,7 @@ import { MISSING } from '../../../shared/format/format';
 import { DisplayDatePipe, DisplayDateTimePipe } from '../../../shared/format/format.pipes';
 import { MatchStateBadge } from '../../../shared/match-state-badge/match-state-badge';
 import { SortButton, ariaSort } from '../../../shared/sort/sort';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 /** The row action a table offers: unmatch a matched entry, or match an unmatched one. */
 export type SettlementRowAction = 'unmatch' | 'match';
@@ -24,11 +25,22 @@ export type SettlementRowAction = 'unmatch' | 'match';
  */
 @Component({
   selector: 'app-settlement-entries-table',
-  imports: [RouterLink, Amount, DisplayDatePipe, DisplayDateTimePipe, MatchStateBadge, SortButton],
+  imports: [
+    RouterLink,
+    Amount,
+    DisplayDatePipe,
+    DisplayDateTimePipe,
+    MatchStateBadge,
+    SortButton,
+    TableRegion,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div
+      [appTableRegion]="caption()"
+      class="overflow-x-auto rounded-lg border border-slate-200 bg-white"
+    >
       <table class="min-w-full divide-y divide-slate-200 text-sm" data-testid="entries-table">
         <caption class="sr-only">
           {{ caption() }}

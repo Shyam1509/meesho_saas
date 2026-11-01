@@ -52,6 +52,9 @@ import {
   readText,
 } from '../../shared/url-state/url-state';
 import { OrdersTable } from './orders-table/orders-table';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { EmptyState } from '../../shared/empty-state/empty-state';
 
 /** The list as the URL query describes it (`?q&status…&from&to&paymentFrom&paymentTo&settlement&sort&page`). */
 export interface OrdersView {
@@ -122,6 +125,9 @@ export function readOrdersView(params: ParamMap): OrdersView {
     DateRange,
     OrdersTable,
     Pager,
+    LoadingState,
+    ErrorState,
+    EmptyState,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orders-page.html',

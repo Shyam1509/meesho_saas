@@ -313,7 +313,7 @@ describe('SettlementEntriesTab (Settlements page, Entries tab)', () => {
       await stable();
       const alert = textOf(listSection().querySelector('[role="alert"]'));
       expect(alert).toContain('The settlement entries could not be loaded.');
-      expect(alert).toContain('Boom. (request ID req-1)');
+      expect(alert).toContain('Boom. (Reference: req-1)');
       buttonByText('Try again')?.click();
       await stable();
       await flushEntries();

@@ -174,7 +174,7 @@ describe('SelectedSellerAccountService', () => {
       });
     expect(service.state()).toEqual({
       kind: 'error',
-      message: 'Something broke. (request ID req-1)',
+      message: 'Something broke. (Reference: req-1)',
     });
     expect(service.selectedId()).toBeNull();
 

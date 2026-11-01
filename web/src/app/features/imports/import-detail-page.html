@@ -26,7 +26,7 @@
 @let view = state();
 <div class="mt-4" [attr.aria-busy]="view.kind === 'loading'" [attr.data-state]="view.kind">
   @if (view.kind === 'loading') {
-    <p role="status" class="text-sm text-slate-700">Loading the import…</p>
+    <app-loading-state text="Loading the import…" />
   } @else if (view.kind === 'not-found') {
     <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
       <p class="font-medium text-red-800">This import was not found.</p>
@@ -35,17 +35,11 @@
       </p>
     </div>
   } @else if (view.kind === 'error') {
-    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
-      <p class="font-medium text-red-800">The import could not be loaded.</p>
-      <p class="mt-1 text-red-800">{{ view.message }}</p>
-      <button
-        type="button"
-        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        (click)="retryLoad()"
-      >
-        Try again
-      </button>
-    </div>
+    <app-error-state
+      heading="The import could not be loaded."
+      [message]="view.message"
+      (retry)="retryLoad()"
+    />
   } @else {
     @let job = view.job;
     <p class="flex flex-wrap items-center gap-2 text-sm text-slate-700">

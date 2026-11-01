@@ -315,7 +315,7 @@ describe('ProductsPage', () => {
       const paragraphs = Array.from(list().querySelectorAll('[role="alert"] p')).map((p) =>
         textOf(p),
       );
-      expect(paragraphs).toEqual(['The products could not be loaded.', 'Boom. (request ID req-1)']);
+      expect(paragraphs).toEqual(['The products could not be loaded.', 'Boom. (Reference: req-1)']);
       buttonByText('Try again', list())?.click();
       await stable();
       await flushList();

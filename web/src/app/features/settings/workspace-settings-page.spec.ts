@@ -107,7 +107,7 @@ describe('WorkspaceSettingsPage', () => {
       });
     await fixture.whenStable();
     expect(textOf(membersSection().querySelector('[role="alert"]'))).toContain(
-      'An unexpected error occurred. Please try again later. (request ID req-1)',
+      'An unexpected error occurred. Please try again later. (Reference: req-1)',
     );
 
     (membersSection().querySelector('button') as HTMLButtonElement).click();

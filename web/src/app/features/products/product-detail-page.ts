@@ -43,6 +43,10 @@ import {
 } from '../../shared/format/format.pipes';
 import { errorMessage, maxLengthTrimmed, showError } from '../../shared/forms/form-helpers';
 import { CostEntryDialog } from './cost-entry-dialog/cost-entry-dialog';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { EmptyState } from '../../shared/empty-state/empty-state';
+import { TableRegion } from '../../shared/table-region/table-region';
 
 /** The API's id format (decimal BIGINT as a string). */
 const ID_PATTERN = /^[1-9][0-9]{0,18}$/;
@@ -81,6 +85,10 @@ export function sortCostHistory(entries: readonly CostEntry[]): CostEntry[] {
     DisplayDatePipe,
     DisplayDateTimePipe,
     UnitCostPipe,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './product-detail-page.html',

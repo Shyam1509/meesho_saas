@@ -40,6 +40,9 @@ import { Pager } from '../../../shared/pager/pager';
 import { OrdersTable } from '../../orders/orders-table/orders-table';
 import { MatchOrderDialog } from '../match-order-dialog/match-order-dialog';
 import { SettlementEntriesTable } from '../settlement-entries-table/settlement-entries-table';
+import { LoadingState } from '../../../shared/loading-state/loading-state';
+import { ErrorState } from '../../../shared/error-state/error-state';
+import { TableRegion } from '../../../shared/table-region/table-region';
 
 /** Page size of the run history. */
 export const RUN_PAGE_SIZE = 10;
@@ -79,6 +82,9 @@ export function describeRun(run: RunSummary): string {
     OrdersTable,
     Pager,
     SettlementEntriesTable,
+    LoadingState,
+    ErrorState,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './reconciliation-tab.html',

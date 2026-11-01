@@ -55,6 +55,9 @@ import {
   readText,
 } from '../../../shared/url-state/url-state';
 import { SettlementEntriesTable } from '../settlement-entries-table/settlement-entries-table';
+import { LoadingState } from '../../../shared/loading-state/loading-state';
+import { ErrorState } from '../../../shared/error-state/error-state';
+import { EmptyState } from '../../../shared/empty-state/empty-state';
 
 /** The entries list as the URL query describes it. */
 export interface EntriesView {
@@ -111,6 +114,9 @@ export function readEntriesView(params: ParamMap): EntriesView {
     FilterBar,
     Pager,
     SettlementEntriesTable,
+    LoadingState,
+    ErrorState,
+    EmptyState,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settlement-entries-tab.html',

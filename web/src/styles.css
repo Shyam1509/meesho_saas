@@ -17,4 +17,34 @@
     outline: 2px solid var(--color-accent-600);
     outline-offset: 2px;
   }
+
+  /* Whatever gets focus or is scrolled to stays clear of the sticky 3.5rem header. */
+  html {
+    scroll-padding-top: 4.5rem;
+  }
+
+  /*
+   * Phones and touch screens: buttons and form fields at least 40px tall, so they are easy to hit
+   * (WCAG 2.5.8 asks for 24px; the primary actions get 40). A utility class still wins.
+   */
+  @media (width < 40rem), (pointer: coarse) {
+    button,
+    select,
+    textarea,
+    input:not([type="checkbox"], [type="radio"], [type="file"], [type="hidden"]) {
+      min-height: 2.5rem;
+    }
+  }
+}
+
+/* No essential motion: honour "reduce motion" (the loading spinner stops, nothing slides). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

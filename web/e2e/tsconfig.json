@@ -1,0 +1,14 @@
+/* Type-checking of the Playwright suite only (Playwright transpiles it itself):
+   `npx tsc -p e2e/tsconfig.json`. Node's types come from api/node_modules (web/ has none). */
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "types": ["node"],
+    "typeRoots": ["../../api/node_modules/@types"]
+  },
+  "include": ["./**/*.ts", "../playwright.config.ts"]
+}

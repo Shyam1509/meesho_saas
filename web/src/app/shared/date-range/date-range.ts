@@ -19,7 +19,7 @@ import { isDateRangeValid } from '../url-state/url-state';
         <input
           type="date"
           [id]="idPrefix() + '-from'"
-          class="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+          class="rounded-md border border-slate-500 bg-white px-2 py-1.5 text-sm text-slate-900"
           [attr.aria-invalid]="invalid() ? 'true' : null"
           [value]="from()"
           (change)="from.set(valueOf($event))"
@@ -29,7 +29,7 @@ import { isDateRangeValid } from '../url-state/url-state';
         <input
           type="date"
           [id]="idPrefix() + '-to'"
-          class="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+          class="rounded-md border border-slate-500 bg-white px-2 py-1.5 text-sm text-slate-900"
           [attr.aria-invalid]="invalid() ? 'true' : null"
           [value]="to()"
           (change)="to.set(valueOf($event))"

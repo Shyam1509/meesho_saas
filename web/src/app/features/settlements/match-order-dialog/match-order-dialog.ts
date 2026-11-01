@@ -18,7 +18,7 @@ import { OrdersApiService } from '../../../core/orders/orders-api.service';
 import { ReconciliationApiService } from '../../../core/reconciliation/reconciliation-api.service';
 import { SettlementEntry } from '../../../core/settlements/settlement.models';
 import { Amount } from '../../../shared/amount/amount';
-import { Dialog } from '../../../shared/dialog/dialog';
+import { DIALOG_ACTIONS_CLASS, Dialog } from '../../../shared/dialog/dialog';
 import { MISSING } from '../../../shared/format/format';
 import { DisplayDatePipe } from '../../../shared/format/format.pipes';
 import { Loadable, toLoadable } from '../../../shared/loadable/loadable';
@@ -58,6 +58,7 @@ export class MatchOrderDialog {
   private search$: Subscription | null = null;
 
   protected readonly missing = MISSING;
+  protected readonly actionsClass = `${DIALOG_ACTIONS_CLASS} justify-end`;
   protected readonly maxLength = MAX_SEARCH_LENGTH;
   protected readonly query = signal('');
   /** `null` until the first search. */

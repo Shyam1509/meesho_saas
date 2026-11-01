@@ -48,6 +48,10 @@ import { SellerAccountPicker } from '../../shared/seller-account-picker/seller-a
 import { SortButton, ariaSort } from '../../shared/sort/sort';
 import { compactParams, readOneOf, readPage, readText } from '../../shared/url-state/url-state';
 import { ProductCreateDialog } from './product-create-dialog/product-create-dialog';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
+import { EmptyState } from '../../shared/empty-state/empty-state';
+import { TableRegion } from '../../shared/table-region/table-region';
 
 /** The list as the URL query describes it (`?q&status&cost&sort&page`). */
 export interface ProductsView {
@@ -106,6 +110,10 @@ export function describeSyncResult(result: ProductSyncResult): string {
     DisplayDatePipe,
     UnitCostPipe,
     ProductCreateDialog,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    TableRegion,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './products-page.html',

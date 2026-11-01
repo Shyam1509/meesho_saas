@@ -831,7 +831,7 @@ describe('ImportsPage', () => {
         .flush(errorBody('INTERNAL_ERROR', 'Boom.'), { status: 500, statusText: 'Error' });
       await stable();
       expect(textOf(history())).toContain('The import history could not be loaded.');
-      expect(textOf(history())).toContain('Boom. (request ID req-1)');
+      expect(textOf(history())).toContain('Boom. (Reference: req-1)');
 
       buttonByText('Try again', history())?.click();
       await stable();

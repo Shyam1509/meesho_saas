@@ -56,6 +56,8 @@ describe('unauthorizedInterceptor', () => {
     await expect(result).rejects.toMatchObject({ status: 401 });
     expect(auth.status()).toBe('anonymous');
     expect(localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)).toBeNull();
+    // The sign-in page says "Your session ended".
+    expect(auth.sessionExpired()).toBe(true);
     await vi.waitFor(() =>
       expect(router.url).toBe('/login?returnUrl=%2Fseller-accounts%3Ftab%3Dall'),
     );
@@ -69,6 +71,7 @@ describe('unauthorizedInterceptor', () => {
 
       await expect(result).rejects.toMatchObject({ status: 401 });
       expect(auth.status()).toBe('authenticated');
+      expect(auth.sessionExpired()).toBe(false);
       expect(localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)).toBe('10');
       expect(router.url).toBe('/seller-accounts?tab=all');
     },
@@ -89,12 +92,29 @@ describe('unauthorizedInterceptor', () => {
     expect(router.url).toBe('/seller-accounts?tab=all');
   });
 
-  it('adds no returnUrl when the 401 happens on the sign-in page itself', async () => {
+  it('a second, late 401 keeps the first redirect and its returnUrl', async () => {
+    const first = firstValueFrom(http.get('/api/v1/workspaces/10/accounts'));
+    const late = firstValueFrom(http.get('/api/v1/workspaces/10/members'));
+    httpTesting.expectOne('/api/v1/workspaces/10/accounts').flush(BODY_401, UNAUTHORIZED);
+    await expect(first).rejects.toMatchObject({ status: 401 });
+    await vi.waitFor(() =>
+      expect(router.url).toBe('/login?returnUrl=%2Fseller-accounts%3Ftab%3Dall'),
+    );
+
+    httpTesting.expectOne('/api/v1/workspaces/10/members').flush(BODY_401, UNAUTHORIZED);
+    await expect(late).rejects.toMatchObject({ status: 401 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(router.url).toBe('/login?returnUrl=%2Fseller-accounts%3Ftab%3Dall');
+    expect(auth.sessionExpired()).toBe(true);
+  });
+
+  it('leaves a signed-out visitor on the sign-in page as it is (no returnUrl, no notice)', async () => {
     auth.clear();
     await router.navigateByUrl('/login');
     const result = firstValueFrom(http.get('/api/v1/workspaces'));
     httpTesting.expectOne('/api/v1/workspaces').flush(BODY_401, UNAUTHORIZED);
     await expect(result).rejects.toBeTruthy();
     await vi.waitFor(() => expect(router.url).toBe('/login'));
+    expect(auth.sessionExpired()).toBe(false);
   });
 });

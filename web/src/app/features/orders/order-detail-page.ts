@@ -16,6 +16,8 @@ import {
 } from '../../shared/format/format.pipes';
 import { SettlementEntriesTable } from '../settlements/settlement-entries-table/settlement-entries-table';
 import { OrderProductCostView } from './order-product-cost/order-product-cost';
+import { LoadingState } from '../../shared/loading-state/loading-state';
+import { ErrorState } from '../../shared/error-state/error-state';
 
 /** The API's id format (decimal BIGINT as a string). */
 const ID_PATTERN = /^[1-9][0-9]{0,18}$/;
@@ -54,6 +56,8 @@ export function sortStatusHistory(events: readonly StatusEvent[]): StatusEvent[]
     DisplayDateTimePipe,
     SettlementEntriesTable,
     OrderProductCostView,
+    LoadingState,
+    ErrorState,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './order-detail-page.html',

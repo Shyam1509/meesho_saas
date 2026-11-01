@@ -7,6 +7,7 @@ import {
   importDetail,
   orderDetail,
   productDetail,
+  textOf,
   workspaceDashboard,
 } from '../testing/test-data';
 import { App } from './app';
@@ -230,6 +231,62 @@ describe('App', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Imports');
     expect(document.title).toBe('Imports · Meesho Seller SaaS');
+  });
+
+  describe('an address no page has', () => {
+    it('shows "Page not found" inside the shell, with the address and a link to the Overview', async () => {
+      auth.setSession(ME_OWNER);
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/no-such-page?from=old-link');
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      // Not redirected: the address stays as typed.
+      expect(router.url).toBe('/no-such-page?from=old-link');
+      expect(document.title).toBe('Page not found · Meesho Seller SaaS');
+      expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Page not found');
+      expect(textOf(el.querySelector('[data-testid="not-found-text"]'))).toContain(
+        'There is no page at /no-such-page.',
+      );
+      const home = Array.from(el.querySelectorAll('main a')).find(
+        (a) => textOf(a) === 'Go to the Overview',
+      );
+      expect(home?.getAttribute('href')).toBe('/overview');
+      expect(el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')).toBeNull();
+    });
+
+    it('moving to another unknown address updates the page and focuses its heading', async () => {
+      auth.setSession(ME_OWNER);
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/no-such-page');
+      await fixture.whenStable();
+      await router.navigateByUrl('/orders/abc/def');
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(textOf(el.querySelector('[data-testid="not-found-text"]'))).toContain(
+        '/orders/abc/def',
+      );
+      const heading = el.querySelector('app-shell main h1');
+      await vi.waitFor(() => expect(document.activeElement).toBe(heading));
+      // The focused heading is what gets read; the live region does not repeat it.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(document.querySelector('[data-live-announcer]')?.textContent).toBe('');
+    });
+
+    it('sends a signed-out visitor to sign in first, then back to that address', async () => {
+      auth.clear();
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/no-such-page');
+      await fixture.whenStable();
+      await answerWhenSent('/api/v1/auth/config', { registrationEnabled: false });
+      await fixture.whenStable();
+
+      expect(router.url).toBe('/login?returnUrl=%2Fno-such-page');
+    });
   });
 
   it('/imports/:importId shows that import inside the shell, titled "Import details"', async () => {

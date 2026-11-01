@@ -107,7 +107,7 @@ let nextId = 0;
             formControlName="dataAsOf"
             required
             [max]="today()"
-            class="mt-1 block w-full max-w-xs rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
+            class="mt-1 block w-full max-w-xs rounded-md border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900 aria-invalid:border-red-600"
             [attr.aria-invalid]="showError(form.controls.dataAsOf) ? 'true' : null"
             [attr.aria-describedby]="
               showError(form.controls.dataAsOf)

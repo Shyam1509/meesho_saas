@@ -122,7 +122,11 @@
   </button>
 
   @if (showTable()) {
-    <div id="trend-table" class="mt-3 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white">
+    <div
+      [appTableRegion]="'Trend per ' + granularity()"
+      id="trend-table"
+      class="mt-3 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white"
+    >
       <table class="min-w-full text-sm" data-testid="trend-table">
         <caption class="sr-only">
           Trend per {{ granularity() }}: every metric

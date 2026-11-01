@@ -263,7 +263,7 @@ describe('OrderDetailPage', () => {
         .flush(errorBody('INTERNAL_ERROR', 'Boom.'), { status: 500, statusText: 'Error' });
       await stable();
       expect(state()).toBe('error');
-      expect(textOf(host().querySelector('[role="alert"]'))).toContain('Boom. (request ID req-1)');
+      expect(textOf(host().querySelector('[role="alert"]'))).toContain('Boom. (Reference: req-1)');
 
       (host().querySelector('[role="alert"] button') as HTMLButtonElement).click();
       await stable();

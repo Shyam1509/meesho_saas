@@ -6,8 +6,8 @@ export interface ApiFieldError {
   reasons: string[];
 }
 
-export const NETWORK_ERROR_MESSAGE =
-  'Could not reach the server. Check your connection and try again.';
+/** What a request that got no answer at all (status 0: offline, DNS, server down) says. */
+export const NETWORK_ERROR_MESSAGE = "Can't reach the server. Check your connection and try again.";
 
 /**
  * A failed API call, as the UI needs it. Built from the API's
@@ -31,6 +31,12 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Gateway statuses a proxy (nginx, a load balancer) answers with when the API behind it is down or
+ * not answering. Without the API's envelope, they mean "the server can't be reached".
+ */
+const GATEWAY_STATUSES = [502, 503, 504];
+
 /** Maps anything an `HttpClient` call can throw to an {@link ApiError}. */
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) {
@@ -50,6 +56,10 @@ export function toApiError(error: unknown): ApiError {
         envelope.details,
       );
     }
+    if (GATEWAY_STATUSES.includes(error.status)) {
+      // No request ID: the API never saw the request, so there is nothing to look up.
+      return new ApiError(error.status, 'SERVER_UNREACHABLE', NETWORK_ERROR_MESSAGE);
+    }
     return new ApiError(
       error.status,
       'UNEXPECTED_RESPONSE',
@@ -59,12 +69,23 @@ export function toApiError(error: unknown): ApiError {
   return new ApiError(0, 'UNKNOWN', 'Something went wrong. Try again.');
 }
 
-/** Text for an error banner. Server errors (5xx) carry the request ID so a report can be traced. */
+/**
+ * The support reference of a server error (5xx): the API's request ID, which its logs carry, so a
+ * report can be traced. `null` for other errors (their message says what to do) or without an ID.
+ */
+export function errorReference(error: unknown): string | null {
+  const apiError = toApiError(error);
+  return apiError.status >= 500 ? apiError.requestId : null;
+}
+
+/**
+ * Text for an error banner: the message, and for a server error (5xx) its support reference,
+ * "Boom. (Reference: req-1)".
+ */
 export function describeApiError(error: unknown): string {
   const apiError = toApiError(error);
-  return apiError.status >= 500 && apiError.requestId
-    ? `${apiError.message} (request ID ${apiError.requestId})`
-    : apiError.message;
+  const reference = errorReference(apiError);
+  return reference ? `${apiError.message} (Reference: ${reference})` : apiError.message;
 }
 
 interface ErrorEnvelope {

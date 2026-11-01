@@ -15,9 +15,9 @@ export interface CheckboxOption {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <details class="group rounded-md border border-slate-300 bg-white text-sm">
+    <details class="group rounded-md border border-slate-500 bg-white text-sm">
       <summary
-        class="cursor-pointer rounded-md px-3 py-1.5 text-slate-900 select-none hover:bg-slate-50"
+        class="cursor-pointer rounded-md px-3 py-1.5 text-slate-900 select-none hover:bg-slate-50 max-sm:py-2.5"
       >
         <span class="font-medium">{{ legend() }}: </span>{{ summary() }}
       </summary>
