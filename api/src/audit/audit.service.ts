@@ -12,12 +12,26 @@ export type AuditAction =
   | 'import.confirmed'
   | 'import.cancelled'
   | 'settlement_entry.matched'
-  | 'settlement_entry.unmatched';
+  | 'settlement_entry.unmatched'
+  | 'product.created'
+  | 'product.updated'
+  | 'products.synced'
+  | 'product_cost.created'
+  | 'product_cost.deleted'
+  | 'expense.created'
+  | 'expense.updated'
+  | 'expense.deleted';
 
 export interface AuditEntry {
   action: AuditAction;
   entityType:
-    'workspace' | 'seller_account' | 'import_job' | 'settlement_entry';
+    | 'workspace'
+    | 'seller_account'
+    | 'import_job'
+    | 'settlement_entry'
+    | 'product'
+    | 'product_cost'
+    | 'expense';
   entityId: number;
   workspaceId: number;
   sellerAccountId?: number | null;

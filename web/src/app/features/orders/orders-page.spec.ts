@@ -339,6 +339,7 @@ describe('OrdersPage', () => {
           quantity: null,
           currentStatusObservedAt: null,
           settlement: { entryCount: 0, amount: null },
+          productCost: { state: 'unknown', unitCost: null, effectiveFrom: null, total: null },
         }),
       ]);
       expect(list().dataset['state']).toBe('ready');
@@ -353,6 +354,7 @@ describe('OrdersPage', () => {
         expect.stringMatching(/^Delivered as of \d{1,2} Oct 2026, \d{1,2}:\d{2} [ap]m$/),
         '₹1,249.50',
         '₹1,199.00',
+        '₹250.00 1 × ₹250.00 from 1 Oct 2026',
         '₹1,180.40 1 entry',
       ]);
       expect(cells(second)).toEqual([
@@ -362,11 +364,62 @@ describe('OrdersPage', () => {
         'Delivered',
         '₹0.00',
         '— not reported',
+        'Unknown cost: add a unit cost for this product',
         'No settlement matched',
       ]);
       expect(textOf(host().querySelector('[data-testid="result-announcement"]'))).toBe(
         '2 orders found.',
       );
+    });
+
+    it('shows the product cost: known total with its hint, amber "Unknown cost" linking to the product, "No SKU" — never ₹0 for a missing cost', async () => {
+      await render();
+      await flushList([
+        orderSummary({
+          quantity: 2,
+          productCost: {
+            state: 'known',
+            unitCost: '125.2500',
+            effectiveFrom: '2026-10-02',
+            total: '250.5000',
+          },
+        }),
+        orderSummary({
+          id: '9002',
+          subOrderNo: 'SO-1002',
+          productId: '701',
+          productCost: { state: 'unknown', unitCost: null, effectiveFrom: null, total: null },
+        }),
+        orderSummary({
+          id: '9003',
+          subOrderNo: 'SO-1003',
+          sku: null,
+          productId: null,
+          productCost: { state: 'no_product', unitCost: null, effectiveFrom: null, total: null },
+        }),
+        orderSummary({
+          id: '9004',
+          subOrderNo: 'SO-1004',
+          sku: 'OLD-SKU',
+          productId: null,
+          productCost: { state: 'no_product', unitCost: null, effectiveFrom: null, total: null },
+        }),
+      ]);
+      const headers = Array.from(host().querySelectorAll('[data-testid="orders-table"] thead th'));
+      expect(headers.map((th) => textOf(th))).toContain('Product cost');
+      const costCell = (i: number) =>
+        rows()[i].querySelector('[data-testid="order-product-cost"]') as HTMLElement;
+
+      expect(textOf(costCell(0))).toBe('₹250.50 2 × ₹125.25 from 2 Oct 2026');
+      const unknown = costCell(1).querySelector('a') as HTMLAnchorElement;
+      expect(unknown.getAttribute('href')).toBe('/products/701');
+      expect(unknown.className).toContain('text-amber-800');
+      expect(textOf(costCell(1))).not.toContain('₹');
+      expect(textOf(costCell(2))).toBe('No SKU');
+      expect(costCell(2).querySelector('a')).toBeNull();
+      // A SKU imported before products existed: not "No SKU" next to a SKU.
+      expect(textOf(costCell(3))).toBe('No product yet: open Products & costs Use “Sync from orders”');
+      expect(costCell(3).querySelector('a')?.getAttribute('href')).toBe('/products');
     });
 
     it('shows an error with "Try again"', async () => {

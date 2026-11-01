@@ -1,0 +1,394 @@
+<a
+  routerLink="/products"
+  class="inline-block rounded-sm text-sm font-medium text-accent-700 underline hover:text-accent-800"
+>
+  <span aria-hidden="true">← </span>All products
+</a>
+
+<h1 class="mt-3 text-2xl font-semibold tracking-tight break-all text-slate-900">
+  {{ heading() }}
+</h1>
+
+@let view = state();
+<div class="mt-4" [attr.aria-busy]="view.kind === 'loading'" [attr.data-state]="view.kind">
+  @if (view.kind === 'loading') {
+    <p role="status" class="text-sm text-slate-700">Loading the product…</p>
+  } @else if (view.kind === 'not-found') {
+    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">This product was not found.</p>
+      <p class="mt-1 text-red-800">
+        Check the link. The product may also belong to a workspace you are not a member of.
+      </p>
+    </div>
+  } @else if (view.kind === 'error') {
+    <div role="alert" class="max-w-2xl rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <p class="font-medium text-red-800">The product could not be loaded.</p>
+      <p class="mt-1 text-red-800">{{ view.message }}</p>
+      <button
+        type="button"
+        class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        (click)="retry()"
+      >
+        Try again
+      </button>
+    </div>
+  } @else {
+    @let product = view.product;
+
+    <div role="status" aria-live="polite" data-testid="product-notice">
+      @if (notice()) {
+        <p
+          class="mb-4 max-w-3xl rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800"
+        >
+          {{ notice() }}
+        </p>
+      }
+    </div>
+    @if (refreshError(); as message) {
+      <p
+        role="alert"
+        class="mb-4 max-w-3xl rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+      >
+        {{ message }}
+      </p>
+    }
+
+    <section aria-labelledby="product-fields-heading" class="max-w-4xl">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="product-fields-heading" class="text-lg font-semibold text-slate-900">Product</h2>
+        @if (product.status === 'active') {
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            (click)="askStatus('archived')"
+          >
+            Archive product
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            (click)="askStatus('active')"
+          >
+            Restore product
+          </button>
+        }
+      </div>
+      <dl
+        class="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 rounded-lg border border-slate-200 bg-white p-5 text-sm sm:grid-cols-2 lg:grid-cols-3"
+        data-testid="product-fields"
+      >
+        <div>
+          <dt class="text-slate-600">SKU</dt>
+          <dd class="font-mono font-medium break-all text-slate-900">{{ product.sku }}</dd>
+        </div>
+        <div class="sm:col-span-2" data-testid="product-name">
+          <dt class="text-slate-600">Name</dt>
+          <dd class="text-slate-900">
+            @if (editingName()) {
+              <form
+                class="mt-1 flex flex-wrap items-start gap-2"
+                novalidate
+                [attr.aria-busy]="savingName()"
+                (submit)="$event.preventDefault(); saveName(product)"
+              >
+                <div class="w-full max-w-md">
+                  <label for="product-name-input" class="sr-only">Product name</label>
+                  <input
+                    #nameInput
+                    id="product-name-input"
+                    type="text"
+                    autocomplete="off"
+                    class="block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 aria-invalid:border-red-600"
+                    [formControl]="nameControl"
+                    [attr.aria-invalid]="showError(nameControl) ? 'true' : null"
+                    [attr.aria-describedby]="
+                      showError(nameControl)
+                        ? 'product-name-hint product-name-error'
+                        : 'product-name-hint'
+                    "
+                  />
+                  <p id="product-name-hint" class="mt-1 text-xs text-slate-600">
+                    Leave blank to remove the name. Imports never overwrite a name you set.
+                  </p>
+                  @if (showError(nameControl)) {
+                    <p id="product-name-error" class="mt-1 text-sm text-red-700">
+                      {{ errorMessage(nameControl, nameMessages) }}
+                    </p>
+                  }
+                  @if (nameError(); as message) {
+                    <p role="alert" class="mt-1 text-sm text-red-700">{{ message }}</p>
+                  }
+                </div>
+                <button
+                  type="submit"
+                  class="rounded-md bg-accent-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-800 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                  [attr.aria-disabled]="savingName() ? 'true' : null"
+                >
+                  {{ savingName() ? 'Saving…' : 'Save name' }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  (click)="cancelEditName()"
+                >
+                  Cancel
+                </button>
+              </form>
+            } @else {
+              <span>{{ product.name ?? missing }}</span>
+              <button
+                #editNameButton
+                type="button"
+                class="ml-2 rounded-md px-2 py-0.5 text-sm font-medium text-accent-700 hover:bg-accent-50"
+                (click)="startEditName(product)"
+              >
+                Edit name
+              </button>
+            }
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Catalog ID</dt>
+          <dd class="break-all text-slate-900">{{ product.catalogId ?? missing }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Status</dt>
+          <dd data-testid="product-status">
+            @if (product.status === 'archived') {
+              <span
+                class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/20"
+              >
+                Archived
+              </span>
+            } @else {
+              <span
+                class="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-800 ring-1 ring-green-700/20"
+              >
+                Active
+              </span>
+            }
+          </dd>
+        </div>
+        <div data-testid="product-current-cost">
+          <dt class="text-slate-600">Unit cost today</dt>
+          <dd class="tabular-nums">
+            @if (product.currentCost; as cost) {
+              <span class="font-medium text-slate-900">{{ cost.unitCost | unitCost }}</span>
+              <span class="block text-xs text-slate-600">
+                since {{ cost.effectiveFrom | displayDate }}
+              </span>
+            } @else {
+              <span class="font-medium text-amber-800">Unknown</span>
+              <span class="block text-xs text-slate-600">No cost is in effect today.</span>
+            }
+          </dd>
+        </div>
+        <div>
+          <dt class="text-slate-600">Orders</dt>
+          <dd class="text-slate-900 tabular-nums">{{ product.orderCount | count }}</dd>
+        </div>
+        <div data-testid="product-orders-without-cost">
+          <dt class="text-slate-600">Orders without cost</dt>
+          <dd class="tabular-nums">
+            @if (product.ordersWithoutCost > 0) {
+              <span class="font-medium text-amber-800">{{ product.ordersWithoutCost | count }}</span>
+              <span class="block text-xs text-slate-600">
+                No cost covers their order date, so their product cost is unknown (not ₹0).
+              </span>
+            } @else {
+              <span class="text-slate-900">0</span>
+            }
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="cost-history-heading" class="mt-8 max-w-4xl">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="cost-history-heading" class="text-lg font-semibold text-slate-900">
+          Unit cost history
+        </h2>
+        @if (isOwner()) {
+          <button
+            type="button"
+            class="rounded-md bg-accent-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-800"
+            (click)="openAddCost()"
+          >
+            Add cost
+          </button>
+        }
+      </div>
+      <div class="mt-2 max-w-3xl space-y-1 text-sm text-slate-600" data-testid="cost-rule">
+        <p>
+          Each unit cost applies from its effective date until the next one starts. {{ costRule }}
+        </p>
+        <p>Costs are never edited: to correct one, delete it and add the right one.</p>
+      </div>
+      @if (!isOwner()) {
+        <p
+          class="mt-3 max-w-3xl rounded-md border border-slate-200 bg-slate-100 p-3 text-sm text-slate-700"
+          data-testid="member-note"
+        >
+          @if (workspaceId()) {
+            You are a member of this workspace. Only owners can add or delete unit costs.
+          } @else {
+            Your role in this product’s workspace could not be checked, so cost changes are not
+            offered. Reload the page to try again.
+          }
+        </p>
+      }
+
+      @if (history().length === 0) {
+        <div
+          class="mt-4 max-w-2xl rounded-lg border border-dashed border-slate-300 bg-white p-6"
+          data-testid="no-costs"
+        >
+          <p class="text-sm font-medium text-slate-900">No unit cost yet.</p>
+          <p class="mt-1 text-sm text-slate-600">
+            Every order of this product has an unknown cost until a cost covers its order date.
+            @if (isOwner()) {
+              Add the cost and the date it applies from.
+            }
+          </p>
+        </div>
+      } @else {
+        <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table class="min-w-full divide-y divide-slate-200 text-sm" data-testid="cost-history">
+            <caption class="sr-only">
+              Unit cost history of
+              {{
+                product.sku
+              }}, newest first
+            </caption>
+            <thead class="bg-slate-50">
+              <tr>
+                <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                  Effective from
+                </th>
+                <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+                  Unit cost
+                </th>
+                <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">Note</th>
+                <th scope="col" class="px-4 py-2.5 text-left font-semibold text-slate-700">
+                  Added by
+                </th>
+                @if (isOwner()) {
+                  <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+                    <span class="sr-only">Actions</span>
+                  </th>
+                }
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              @for (entry of history(); track entry.id) {
+                <tr [attr.data-cost-id]="entry.id">
+                  <th scope="row" class="px-4 py-3 text-left align-top font-normal text-slate-900">
+                    <span class="whitespace-nowrap">{{ entry.effectiveFrom | displayDate }}</span>
+                    @switch (costBadge(entry, product)) {
+                      @case ('current') {
+                        <span
+                          class="ml-2 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800 ring-1 ring-green-700/20"
+                        >
+                          Current
+                        </span>
+                      }
+                      @case ('planned') {
+                        <span
+                          class="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-700/20"
+                        >
+                          Planned
+                        </span>
+                      }
+                    }
+                  </th>
+                  <td class="px-4 py-3 text-right align-top whitespace-nowrap text-slate-900 tabular-nums">
+                    {{ entry.unitCost | unitCost }}
+                  </td>
+                  <td class="px-4 py-3 align-top text-slate-700">
+                    @if (entry.note) {
+                      {{ entry.note }}
+                    } @else {
+                      <span aria-hidden="true">{{ missing }}</span>
+                      <span class="sr-only">No note</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 align-top text-slate-700">
+                    {{ userName(entry.createdBy) }}
+                    <span class="block text-xs text-slate-600">
+                      {{ entry.createdAt | displayDateTime }}
+                    </span>
+                  </td>
+                  @if (isOwner()) {
+                    <td class="px-4 py-3 text-right align-top whitespace-nowrap">
+                      <button
+                        type="button"
+                        class="rounded-md px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                        (click)="askDelete(entry)"
+                      >
+                        Delete<span class="sr-only">
+                          the cost from {{ entry.effectiveFrom | displayDate }}</span
+                        >
+                      </button>
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    @if (addingCost()) {
+      <app-cost-entry-dialog
+        [productId]="product.id"
+        [sku]="product.sku"
+        (saved)="onCostAdded($event)"
+        (cancelled)="addingCost.set(false)"
+      />
+    }
+
+    @if (deleteTarget(); as target) {
+      <app-confirm-dialog
+        [heading]="
+          'Delete the unit cost from ' + (target.effectiveFrom | displayDate) + '?'
+        "
+        [message]="deleteMessage(target)"
+        confirmLabel="Delete cost"
+        pendingLabel="Deleting…"
+        tone="danger"
+        [pending]="deletePending()"
+        [error]="deleteError()"
+        (confirmed)="confirmDelete(product)"
+        (cancelled)="cancelDelete()"
+      />
+    }
+
+    @if (statusConfirm(); as status) {
+      @if (status === 'archived') {
+        <app-confirm-dialog
+          [heading]="'Archive ' + product.sku + '?'"
+          message="Archiving only hides it from the default product list (show archived products to see it). Its orders and unit costs still count, and you can restore it at any time."
+          confirmLabel="Archive product"
+          pendingLabel="Archiving…"
+          [pending]="statusPending()"
+          [error]="statusError()"
+          (confirmed)="confirmStatus(product)"
+          (cancelled)="cancelStatus()"
+        />
+      } @else {
+        <app-confirm-dialog
+          [heading]="'Restore ' + product.sku + '?'"
+          message="It shows in the product list again."
+          confirmLabel="Restore product"
+          pendingLabel="Restoring…"
+          [pending]="statusPending()"
+          [error]="statusError()"
+          (confirmed)="confirmStatus(product)"
+          (cancelled)="cancelStatus()"
+        />
+      }
+    }
+  }
+</div>

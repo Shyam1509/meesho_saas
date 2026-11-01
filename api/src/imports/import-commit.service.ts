@@ -30,6 +30,10 @@ import {
   findActiveDuplicate,
   ImportsService,
 } from './imports.service';
+import {
+  ProductMappingService,
+  type MappingResult,
+} from '../products/product-mapping.service';
 import { ReconciliationMatcherService } from '../reconciliation/reconciliation-matcher.service';
 import { FINGERPRINT_VERSION } from './parsing/fingerprint';
 import type { RowValues } from './parsing/parsed-report';
@@ -115,6 +119,8 @@ function orderColumns(values: OrderValues) {
  * Milestone 5: after the job's rows are written (orders OR settlements: either side may arrive first) the
  * settlement ↔ order matcher runs in the SAME transaction, under the same account lock, and records a
  * reconciliation_runs row with trigger 'import'; a failing match rolls the whole import back.
+ * Milestone 6: an orders import then creates the missing products for its SKUs and re-links its orders by
+ * SKU (ProductMappingService), right after the order upserts, in the same transaction and lock.
  */
 @Injectable()
 export class ImportCommitService {
@@ -126,6 +132,7 @@ export class ImportCommitService {
     private readonly audit: AuditService,
     private readonly imports: ImportsService,
     private readonly matcher: ReconciliationMatcherService,
+    private readonly productMapping: ProductMappingService,
   ) {}
 
   async confirm(
@@ -284,6 +291,18 @@ export class ImportCommitService {
             job.reportType === 'orders_csv'
               ? await this.importOrders(job, transaction)
               : await this.importSettlements(job, transaction);
+          // M6, orders only: products for the job's new SKUs, then its orders re-linked by SKU.
+          const products: MappingResult | null =
+            job.reportType === 'orders_csv'
+              ? await this.productMapping.mapImportedOrders(
+                  {
+                    workspaceId: job.workspaceId,
+                    sellerAccountId: job.sellerAccountId,
+                  },
+                  job.id,
+                  transaction,
+                )
+              : null;
           const [skipped] = await ImportRow.update(
             { status: 'skipped' },
             { where: { importJobId: job.id, status: 'error' }, transaction },
@@ -344,6 +363,7 @@ export class ImportCommitService {
                 statusEvents: result.statusEvents,
                 skippedRows: skipped,
                 retry,
+                ...(products ?? {}),
               },
             },
             transaction,
@@ -353,6 +373,7 @@ export class ImportCommitService {
             skipped,
             reconciliationRunId: reconciliation.id,
             autoMatched: reconciliation.matchedCount,
+            ...(products ?? {}),
           };
         },
       );

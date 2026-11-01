@@ -26,6 +26,10 @@ describe('order mapping', () => {
           supplierDiscountedPrice: null,
           currentStatus: 'Delivered',
           currentStatusObservedAt: new Date('2026-10-10T18:29:59.999Z'),
+          productId: 7,
+          costUnitCost: '549.5000',
+          costEffectiveFrom: '2026-10-01',
+          costTotal: '1099.0000',
         },
         { entryCount: 1, amount: '420.15' },
       ),
@@ -44,6 +48,13 @@ describe('order mapping', () => {
       currentStatus: 'Delivered',
       currentStatusObservedAt: '2026-10-10T18:29:59.999Z',
       settlement: { entryCount: 1, amount: '420.15' },
+      productId: '7',
+      productCost: {
+        state: 'known',
+        unitCost: '549.5000',
+        effectiveFrom: '2026-10-01',
+        total: '1099.0000',
+      },
     });
   });
 

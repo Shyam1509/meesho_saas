@@ -29,7 +29,8 @@ describe('PlaceholderPage', () => {
 
   // These screens sit inside the app shell, which needs a signed-in user. Seller accounts and
   // Workspace settings are real pages since Milestone 3, Imports since Milestone 4, Orders and
-  // Settlements & reconciliation since Milestone 5 (see app.spec.ts and their own specs).
+  // Settlements & reconciliation since Milestone 5, Products & costs and Expenses since Milestone 6
+  // (see app.spec.ts and their own specs).
   describe('through the router', () => {
     beforeEach(() => {
       TestBed.configureTestingModule({
@@ -43,11 +44,7 @@ describe('PlaceholderPage', () => {
       TestBed.inject(AuthStateService).setSession(ME_OWNER);
     });
 
-    it.each([
-      ['/products', 'Products & costs', 'Milestone 6'],
-      ['/expenses', 'Expenses', 'Milestone 6'],
-      ['/reports', 'Reports', 'Milestone 7'],
-    ])('%s shows "%s" planned in %s and sets the page title', async (url, heading, milestone) => {
+    it.each([['/reports', 'Reports', 'Milestone 7']])('%s shows "%s" planned in %s and sets the page title', async (url, heading, milestone) => {
       const harness = await RouterTestingHarness.create();
       await harness.navigateByUrl(url);
 

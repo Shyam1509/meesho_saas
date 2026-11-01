@@ -7,6 +7,7 @@ import {
 } from '@angular/forms';
 
 import { ApiError } from '../../core/api/api-error';
+import { isDateOnly } from '../url-state/url-state';
 
 /** `required`, ignoring surrounding whitespace (the value is trimmed before it is sent). */
 export const requiredTrimmed: ValidatorFn = (control: AbstractControl): ValidationErrors | null =>
@@ -25,6 +26,52 @@ export const emailTrimmed: ValidatorFn = (control: AbstractControl): ValidationE
   const value = String(control.value ?? '').trim();
   return value.length === 0 ? null : Validators.email({ value } as AbstractControl);
 };
+
+/** A real calendar day written `YYYY-MM-DD` (`date` error); empty passes. */
+export const dateOnly: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+  const value = String(control.value ?? '').trim();
+  return value.length === 0 || isDateOnly(value) ? null : { date: true };
+};
+
+/**
+ * A valid day no later than `max()` (`YYYY-MM-DD`, read at validation time so "today" stays
+ * current): `after` error. Empty or malformed values pass (see {@link dateOnly}).
+ */
+export function notAfter(max: () => string): ValidatorFn {
+  return (control: AbstractControl): ValidationErrors | null => {
+    const value = String(control.value ?? '').trim();
+    const limit = max();
+    return isDateOnly(value) && value > limit ? { after: { max: limit } } : null;
+  };
+}
+
+/**
+ * A rupee amount typed as text (trimmed): digits with at most `maxDecimals` decimals, no sign and
+ * no leading zeros such as "007.5", as the API requires (`format` error); above zero when
+ * `positive` (`positive` error); below `limit` (`limit` error). Empty passes (pair it with
+ * `requiredTrimmed`).
+ */
+export function decimalAmount(options: {
+  maxDecimals: number;
+  limit: number;
+  positive?: boolean;
+}): ValidatorFn {
+  const pattern = new RegExp(`^(0|[1-9]\\d*)(\\.\\d{1,${options.maxDecimals}})?$`);
+  return (control: AbstractControl): ValidationErrors | null => {
+    const value = String(control.value ?? '').trim();
+    if (value.length === 0) {
+      return null;
+    }
+    if (!pattern.test(value)) {
+      return { format: true };
+    }
+    const amount = Number(value);
+    if (options.positive && amount <= 0) {
+      return { positive: true };
+    }
+    return amount >= options.limit ? { limit: { limit: options.limit } } : null;
+  };
+}
 
 /**
  * Puts the API's per-field reasons (`details`) on the matching controls as a `server` error, which

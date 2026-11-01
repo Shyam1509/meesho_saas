@@ -64,8 +64,25 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/settlements/settlements-page').then((m) => m.SettlementsPage),
       },
-      placeholderRoute('products', 'Products & costs', [6]),
-      placeholderRoute('expenses', 'Expenses', [6]),
+      {
+        path: 'products',
+        title: 'Products & costs',
+        loadComponent: () =>
+          import('./features/products/products-page').then((m) => m.ProductsPage),
+      },
+      {
+        // Under /products, so the "Products & costs" navigation item stays current.
+        path: 'products/:productId',
+        title: 'Product details',
+        loadComponent: () =>
+          import('./features/products/product-detail-page').then((m) => m.ProductDetailPage),
+      },
+      {
+        path: 'expenses',
+        title: 'Expenses',
+        loadComponent: () =>
+          import('./features/expenses/expenses-page').then((m) => m.ExpensesPage),
+      },
       {
         path: 'imports',
         title: 'Imports',

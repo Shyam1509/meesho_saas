@@ -12,6 +12,7 @@ import {
   pageWindow,
   type PaginationQueryDto,
 } from '../common/http/pagination.dto';
+import { IST_OFFSET_MS, todayInIndia } from '../common/time/india-date';
 import { AppConfigService } from '../config/app-config.service';
 import {
   ImportJob,
@@ -50,8 +51,6 @@ export const FILE_REQUIRED_REASON =
   'A file is required (multipart field "file")';
 export const DATA_AS_OF_REQUIRED_REASON =
   'dataAsOf is required for orders CSV files: the day (YYYY-MM-DD) you downloaded the report from Meesho';
-/** India Standard Time (UTC+05:30, no daylight saving). */
-const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 const SAMPLE_ROWS = 10;
 const CREATED_BY_ATTRIBUTES = ['id', 'displayName', 'email'];
 
@@ -87,10 +86,8 @@ export function duplicateFileException(earlierJobId: number): ApiException {
   );
 }
 
-/** Today's calendar date in India (YYYY-MM-DD). */
-export function todayInIndia(now = Date.now()): string {
-  return new Date(now + IST_OFFSET_MS).toISOString().slice(0, 10);
-}
+// Moved to common/time in M6 (products and expenses use it too); re-exported for existing callers.
+export { todayInIndia };
 
 /**
  * "Statuses as of" date (YYYY-MM-DD, already pattern-checked) → the END of that day in India

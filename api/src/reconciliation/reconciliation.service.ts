@@ -5,10 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/sequelize';
-import { QueryTypes, Transaction } from 'sequelize';
+import { QueryTypes, type Transaction } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { AuditService } from '../audit/audit.service';
 import type { Actor } from '../auth/auth.types';
+import {
+  ACCOUNT_BUSY_MESSAGE,
+  inAccountTransaction,
+} from '../authorization/account-transaction';
 import {
   WorkspaceAccessService,
   type AccountAccess,
@@ -21,7 +25,6 @@ import {
   toUserRef,
 } from '../common/http/refs.dto';
 import { scopeOf, type AccountScope } from '../common/sql/account-scope';
-import { isLockContention } from '../common/sql/lock-errors';
 import { readSnapshot } from '../common/sql/read-snapshot';
 import { moneyOrNull, toCount } from '../common/sql/values';
 import { sanitizeError } from '../common/logging/error-sanitizer';
@@ -79,9 +82,8 @@ export const RUN_ACCOUNT_DISABLED_MESSAGE =
   'This seller account is disabled: enable it before changing its reconciliation.';
 export const RUN_FAILED_MESSAGE =
   'The matching run failed and nothing was changed. You can run it again.';
-/** 409 for a lock wait timeout (1205) or deadlock (1213) on the account: nothing changed, retry. */
-export const ACCOUNT_BUSY_MESSAGE =
-  'An import or another change is running for this account; try again shortly.';
+// The account-lock helper moved to authorization/account-transaction in M6 (products share it).
+export { ACCOUNT_BUSY_MESSAGE };
 
 /** A reconciliation_runs row joined with the user who triggered it. */
 export interface RunRow {
@@ -505,9 +507,9 @@ export class ReconciliationService {
    * READ COMMITTED transaction whose FIRST statement locks the account row (and re-checks membership and
    * role): serialises it with imports and other matching changes of the account. Disabled account → 409.
    * Lock wait timeout (1205) or deadlock (1213) → 409 ACCOUNT_BUSY_MESSAGE (everything rolled back); a
-   * manual run that hits it is a refusal, not a failed run.
+   * manual run that hits it is a refusal, not a failed run. (Shared helper: authorization/account-transaction.)
    */
-  private async inAccountTransaction<T>(
+  private inAccountTransaction<T>(
     actor: Actor,
     accountId: string,
     minRole: 'member' | 'owner',
@@ -516,29 +518,15 @@ export class ReconciliationService {
       transaction: Transaction,
     ) => Promise<T>,
   ): Promise<T> {
-    try {
-      return await this.sequelize.transaction(
-        { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
-        async (transaction) => {
-          const { account } = await this.access.requireAccount(
-            actor.userId,
-            accountId,
-            minRole,
-            { transaction, lock: true },
-          );
-          if (account.status !== 'active') {
-            throw new ApiException('CONFLICT', RUN_ACCOUNT_DISABLED_MESSAGE);
-          }
-          return work(account, transaction);
-        },
-      );
-    } catch (err) {
-      // Waited too long for the account lock (an import holds it) or lost a deadlock: rolled back, retry.
-      if (isLockContention(err)) {
-        throw new ApiException('CONFLICT', ACCOUNT_BUSY_MESSAGE);
-      }
-      throw err;
-    }
+    return inAccountTransaction(
+      this.sequelize,
+      this.access,
+      actor,
+      accountId,
+      minRole,
+      RUN_ACCOUNT_DISABLED_MESSAGE,
+      work,
+    );
   }
 
   /** The entry of THIS account, locked for the change; another account's id (or a missing one) → 404. */

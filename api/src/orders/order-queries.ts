@@ -7,7 +7,13 @@ import {
   type AccountScope,
   type SqlFilter,
 } from '../common/sql/account-scope';
-import { moneyOrNull, toCount } from '../common/sql/values';
+import { idOrNull, moneyOrNull, toCount } from '../common/sql/values';
+import {
+  ORDER_COST_COLUMNS,
+  ORDER_COST_JOIN,
+  toOrderProductCost,
+  type OrderCostRow,
+} from '../products/effective-cost';
 import type {
   OrderSettlementSummaryDto,
   OrderSort,
@@ -17,7 +23,7 @@ import type {
   StatusEventDto,
 } from './dto/order.dto';
 
-export interface OrderSummaryRow {
+export interface OrderSummaryRow extends OrderCostRow {
   id: number | string;
   subOrderNo: string;
   orderNo: string | null;
@@ -33,11 +39,19 @@ export interface OrderSummaryRow {
   currentStatusObservedAt: Date | string;
 }
 
+/**
+ * Order summary columns. Since M6 they include the product cost (ORDER_COST_COLUMNS), so every query
+ * selecting them must also add ORDER_SUMMARY_JOINS after `FROM orders o`.
+ */
 export const ORDER_SUMMARY_COLUMNS = `o.id, o.sub_order_no AS subOrderNo, o.order_no AS orderNo,
               o.order_date AS orderDate, o.product_name AS productName, o.sku, o.size, o.quantity,
               o.customer_state AS customerState, o.supplier_listed_price AS supplierListedPrice,
               o.supplier_discounted_price AS supplierDiscountedPrice, o.current_status AS currentStatus,
-              o.current_status_observed_at AS currentStatusObservedAt`;
+              o.current_status_observed_at AS currentStatusObservedAt,
+              ${ORDER_COST_COLUMNS}`;
+
+/** The joins ORDER_SUMMARY_COLUMNS needs: the cost row effective on the order date (effective-cost.ts). */
+export const ORDER_SUMMARY_JOINS = ORDER_COST_JOIN;
 
 const SORT_COLUMNS: Readonly<Record<OrderSortKey, string>> = {
   orderDate: 'o.order_date',
@@ -104,6 +118,8 @@ export function toOrderSummaryDto(
     currentStatus: row.currentStatus,
     currentStatusObservedAt: isoTimestamp(row.currentStatusObservedAt),
     settlement,
+    productId: idOrNull(row.productId),
+    productCost: toOrderProductCost(row),
   };
 }
 
@@ -154,7 +170,12 @@ export async function settlementSummaries(
   return result;
 }
 
-/** A page of order summaries (with their settlement summaries) and the total row count of the filter. */
+/**
+ * A page of order summaries (with their settlement summaries) and the total row count of the filter.
+ * Deferred join (M6): the page's ids are found first (filter, order, LIMIT/OFFSET on `orders` alone), and
+ * only those rows are joined to their cost, so a deep page does not look up a cost for every skipped row.
+ * `orderBy` only uses `o.` columns, so it sorts the inner ids and the outer rows the same way.
+ */
 export async function pageOfOrders(
   sequelize: Sequelize,
   scope: AccountScope,
@@ -165,10 +186,13 @@ export async function pageOfOrders(
 ): Promise<{ items: OrderSummaryDto[]; total: number }> {
   const rows = await sequelize.query<OrderSummaryRow>(
     `SELECT ${ORDER_SUMMARY_COLUMNS}
-       FROM orders o
-       ${whereClause(filter)}
-       ORDER BY ${orderBy}
-       LIMIT :limit OFFSET :offset`,
+       FROM (SELECT o.id FROM orders o
+             ${whereClause(filter)}
+             ORDER BY ${orderBy}
+             LIMIT :limit OFFSET :offset) pg
+       JOIN orders o ON o.id = pg.id
+       ${ORDER_SUMMARY_JOINS}
+       ORDER BY ${orderBy}`,
     {
       type: QueryTypes.SELECT,
       replacements: { ...filter.replacements, ...window },

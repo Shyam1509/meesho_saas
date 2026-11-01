@@ -73,11 +73,63 @@ describe('OrderDetailPage', () => {
     expect(textOf(field('Packet ID'))).toBe('—');
     expect(textOf(field('Supplier listed price'))).toBe('₹1,249.50');
     expect(textOf(field('Supplier discounted price'))).toBe('₹1,199.00');
+    expect(textOf(field('Product cost'))).toBe(
+      '₹250.00 1 × ₹250.00 from 1 Oct 2026 View product and unit costs',
+    );
+    expect(field('Product cost').querySelector('a')?.getAttribute('href')).toBe('/products/700');
     expect(field('First imported from').querySelector('a')?.getAttribute('href')).toBe(
       '/imports/480',
     );
     expect(field('Last updated by').querySelector('a')?.getAttribute('href')).toBe('/imports/500');
     expect(host().querySelector('a[href="/orders"]')?.textContent).toContain('All orders');
+  });
+
+  describe('product cost', () => {
+    it('explains an unknown cost and links to the product, never showing ₹0', async () => {
+      await render(
+        orderDetail({
+          productCost: { state: 'unknown', unitCost: null, effectiveFrom: null, total: null },
+        }),
+      );
+      const cost = field('Product cost');
+      expect(textOf(cost)).toBe(
+        'Unknown cost: add a unit cost for this product No unit cost is effective on the order date, so this order’s cost is unknown (not ₹0). View product and unit costs',
+      );
+      expect(cost.querySelector('[data-cost-state]')?.getAttribute('data-cost-state')).toBe(
+        'unknown',
+      );
+      expect(textOf(cost)).not.toContain('₹0.00');
+    });
+
+    it('says "No product yet" for an order whose SKU has no product yet', async () => {
+      await render(
+        orderDetail({
+          sku: 'OLD-SKU',
+          productId: null,
+          productCost: { state: 'no_product', unitCost: null, effectiveFrom: null, total: null },
+        }),
+      );
+      const cost = field('Product cost');
+      expect(textOf(cost)).toBe(
+        'No product yet: open Products & costs Use “Sync from orders” No product exists for this SKU yet, so the cost is unknown (not ₹0). “Sync from orders” on Products & costs creates it.',
+      );
+      expect(cost.querySelector('a')?.getAttribute('href')).toBe('/products');
+      expect(textOf(cost)).not.toContain('has no SKU');
+    });
+
+    it('says "No SKU" for an order without a SKU', async () => {
+      await render(
+        orderDetail({
+          sku: null,
+          productId: null,
+          productCost: { state: 'no_product', unitCost: null, effectiveFrom: null, total: null },
+        }),
+      );
+      expect(textOf(field('Product cost'))).toBe(
+        'No SKU The order has no SKU, so it has no product and no cost.',
+      );
+      expect(field('Product cost').querySelector('a')).toBeNull();
+    });
   });
 
   describe('status history', () => {

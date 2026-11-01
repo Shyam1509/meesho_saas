@@ -10,16 +10,26 @@ import {
   DisplayDateTimePipe,
 } from '../../../shared/format/format.pipes';
 import { SortButton, ariaSort } from '../../../shared/sort/sort';
+import { OrderProductCostView } from '../order-product-cost/order-product-cost';
 
 /**
  * Orders as a table: sub order no. (links to the order), order date, product, quantity, Meesho's
- * current status, the two reported prices and what has been settled so far (as reported). With
- * `sort` set, the sub order, date and status headers sort the list (server side, via
+ * current status, the two reported prices, the product cost (unit cost on the order date ×
+ * quantity, or "Unknown cost" / "No product yet" / "No SKU") and what has been settled so far (as
+ * reported). With `sort` set, the sub order, date and status headers sort the list (server side, via
  * `sortChange`).
  */
 @Component({
   selector: 'app-orders-table',
-  imports: [RouterLink, Amount, CountPipe, DisplayDatePipe, DisplayDateTimePipe, SortButton],
+  imports: [
+    RouterLink,
+    Amount,
+    CountPipe,
+    DisplayDatePipe,
+    DisplayDateTimePipe,
+    SortButton,
+    OrderProductCostView,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -88,6 +98,9 @@ import { SortButton, ariaSort } from '../../../shared/sort/sort';
               Discounted price
             </th>
             <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
+              Product cost
+            </th>
+            <th scope="col" class="px-4 py-2.5 text-right font-semibold text-slate-700">
               Settled (as reported)
             </th>
           </tr>
@@ -138,6 +151,17 @@ import { SortButton, ariaSort } from '../../../shared/sort/sort';
               </td>
               <td class="px-4 py-3 text-right align-top text-slate-900 tabular-nums">
                 <app-amount [value]="order.supplierDiscountedPrice" />
+              </td>
+              <td
+                class="px-4 py-3 text-right align-top tabular-nums"
+                data-testid="order-product-cost"
+              >
+                <app-order-product-cost
+                  [cost]="order.productCost"
+                  [quantity]="order.quantity"
+                  [productId]="order.productId"
+                  [sku]="order.sku"
+                />
               </td>
               <td
                 class="px-4 py-3 text-right align-top tabular-nums"

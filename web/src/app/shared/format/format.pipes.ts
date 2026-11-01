@@ -7,6 +7,7 @@ import {
   formatDateTime,
   formatFileSize,
   formatInr,
+  formatUnitCost,
 } from './format';
 
 /** `{{ amount | inr }}` → "₹12,34,567.50"; missing → "—". */
@@ -14,6 +15,14 @@ import {
 export class InrPipe implements PipeTransform {
   transform(value: string | number | null | undefined): string {
     return formatInr(value);
+  }
+}
+
+/** `{{ unitCost | unitCost }}` → "₹12.3456" (up to 4 decimals); missing → "—". */
+@Pipe({ name: 'unitCost' })
+export class UnitCostPipe implements PipeTransform {
+  transform(value: string | null | undefined): string {
+    return formatUnitCost(value);
   }
 }
 

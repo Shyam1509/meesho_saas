@@ -2,7 +2,12 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router, TitleStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
 
-import { ME_OWNER, importDetail, orderDetail } from '../testing/test-data';
+import {
+  ME_OWNER,
+  importDetail,
+  orderDetail,
+  productDetail,
+} from '../testing/test-data';
 import { App } from './app';
 import { routes } from './app.routes';
 import { provideApiHttpClient } from './core/api/provide-api-http-client';
@@ -87,6 +92,7 @@ describe('App', () => {
   it.each([
     ['/orders', 'Orders'],
     ['/settlements', 'Settlements & reconciliation'],
+    ['/products', 'Products & costs'],
   ])('%s shows the "%s" page inside the shell', async (url, heading) => {
     auth.setSession(ME_OWNER);
     const fixture = TestBed.createComponent(App);
@@ -118,6 +124,40 @@ describe('App', () => {
     expect(
       el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
     ).toBe('Orders');
+  });
+
+  it('/products/:productId shows the product inside the shell, "Products & costs" current', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/products/700');
+    await fixture.whenStable();
+    expect(document.title).toBe('Product details · Meesho Seller SaaS');
+
+    await answerWhenSent('/api/v1/products/700', productDetail());
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Product KURTA-M');
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe('Products & costs');
+  });
+
+  it('/expenses shows the "Expenses" page inside the shell', async () => {
+    auth.setSession(ME_OWNER);
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/expenses');
+    await fixture.whenStable();
+    await answerWhenSent('/api/v1/expenses/categories', { items: [] });
+    await answerWhenSent('/api/v1/workspaces/10/accounts', { items: [] });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-shell main h1')?.textContent?.trim()).toBe('Expenses');
+    expect(document.title).toBe('Expenses · Meesho Seller SaaS');
+    expect(
+      el.querySelector('nav[aria-label="Main"] a[aria-current="page"]')?.textContent?.trim(),
+    ).toBe('Expenses');
   });
 
   it('/imports shows the "Imports" page inside the shell', async () => {

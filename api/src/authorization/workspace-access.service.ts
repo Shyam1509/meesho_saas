@@ -6,12 +6,18 @@ import {
 import { InjectConnection } from '@nestjs/sequelize';
 import { QueryTypes, type Transaction } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
-import type { SellerAccountStatus, WorkspaceRole } from '../database/models';
+import type {
+  ExpenseScope,
+  SellerAccountStatus,
+  WorkspaceRole,
+} from '../database/models';
 import { hasRole } from './roles';
 
 export const WORKSPACE_NOT_FOUND_MESSAGE = 'Workspace not found.';
 export const ACCOUNT_NOT_FOUND_MESSAGE = 'Seller account not found.';
 export const IMPORT_NOT_FOUND_MESSAGE = 'Import not found.';
+export const PRODUCT_NOT_FOUND_MESSAGE = 'Product not found.';
+export const EXPENSE_NOT_FOUND_MESSAGE = 'Expense not found.';
 export const INSUFFICIENT_ROLE_MESSAGE =
   'You do not have permission to perform this action.';
 
@@ -139,6 +145,100 @@ export class WorkspaceAccessService {
     const { role, accountStatus, ...importJob } = row;
     return { importJob, accountStatus, role };
   }
+
+  /**
+   * The product (via its account's workspace) if the caller is a member with `minRole`: one query, like
+   * requireImportJob. No lock option: product writes lock the ACCOUNT row first (inAccountTransaction),
+   * always in that order, then re-read the product inside that transaction.
+   */
+  async requireProduct(
+    userId: number,
+    productId: string,
+    minRole: WorkspaceRole,
+    options: Pick<AccessOptions, 'transaction'> = {},
+  ): Promise<ProductAccess> {
+    const [row] = await this.sequelize.query<
+      ProductAccess['product'] & {
+        accountStatus: SellerAccountStatus;
+        role: WorkspaceRole;
+      }
+    >(
+      `SELECT p.id, p.workspace_id AS workspaceId, p.seller_account_id AS sellerAccountId,
+              a.status AS accountStatus, m.role
+       FROM products p
+       JOIN seller_accounts a ON a.id = p.seller_account_id AND a.workspace_id = p.workspace_id
+       JOIN workspace_members m ON m.workspace_id = a.workspace_id AND m.user_id = :userId
+       WHERE p.id = CAST(:productId AS UNSIGNED)`,
+      {
+        type: QueryTypes.SELECT,
+        replacements: { userId, productId },
+        transaction: options.transaction,
+      },
+    );
+    if (!row) throw new NotFoundException(PRODUCT_NOT_FOUND_MESSAGE);
+    assertRole(row.role, minRole);
+    const { role, accountStatus, ...product } = row;
+    return { product, accountStatus, role };
+  }
+
+  /**
+   * The expense (workspace- or account-scoped) if the caller is a member of its workspace with `minRole`:
+   * one query. `accountStatus` is the status of its seller account (null for a workspace expense). No lock
+   * option: the caller locks the expense row itself inside its transaction.
+   */
+  async requireExpense(
+    userId: number,
+    expenseId: string,
+    minRole: WorkspaceRole,
+    options: Pick<AccessOptions, 'transaction'> = {},
+  ): Promise<ExpenseAccess> {
+    const [row] = await this.sequelize.query<
+      ExpenseAccess['expense'] & {
+        accountStatus: SellerAccountStatus | null;
+        role: WorkspaceRole;
+      }
+    >(
+      `SELECT e.id, e.workspace_id AS workspaceId, e.seller_account_id AS sellerAccountId, e.scope,
+              a.status AS accountStatus, m.role
+       FROM expenses e
+       JOIN workspace_members m ON m.workspace_id = e.workspace_id AND m.user_id = :userId
+       LEFT JOIN seller_accounts a ON a.id = e.seller_account_id AND a.workspace_id = e.workspace_id
+       WHERE e.id = CAST(:expenseId AS UNSIGNED)`,
+      {
+        type: QueryTypes.SELECT,
+        replacements: { userId, expenseId },
+        transaction: options.transaction,
+      },
+    );
+    if (!row) throw new NotFoundException(EXPENSE_NOT_FOUND_MESSAGE);
+    assertRole(row.role, minRole);
+    const { role, accountStatus, ...expense } = row;
+    return { expense, accountStatus, role };
+  }
+}
+
+/** A product the caller may see, resolved through its seller account to the caller's membership. */
+export interface ProductAccess {
+  product: {
+    id: number;
+    workspaceId: number;
+    sellerAccountId: number;
+  };
+  accountStatus: SellerAccountStatus;
+  role: WorkspaceRole;
+}
+
+/** An expense the caller may see, resolved through its workspace to the caller's membership. */
+export interface ExpenseAccess {
+  expense: {
+    id: number;
+    workspaceId: number;
+    sellerAccountId: number | null;
+    scope: ExpenseScope;
+  };
+  /** Status of the expense's seller account; null for a workspace-scoped expense. */
+  accountStatus: SellerAccountStatus | null;
+  role: WorkspaceRole;
 }
 
 /**

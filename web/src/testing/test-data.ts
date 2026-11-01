@@ -12,6 +12,12 @@ import {
 } from '../app/core/imports/import.models';
 import { ImportRef } from '../app/core/api/refs';
 import { OrderDetail, OrderSummary, StatusEvent } from '../app/core/orders/order.models';
+import { CostEntry, ProductDetail, ProductSummary } from '../app/core/products/product.models';
+import {
+  Expense,
+  ExpenseCategory,
+  ExpenseListResponse,
+} from '../app/core/expenses/expense.models';
 import {
   ReconciliationOverview,
   RunSummary,
@@ -230,7 +236,10 @@ export function importRef(overrides: Partial<ImportRef> = {}): ImportRef {
   };
 }
 
-/** Order SO-1001 (id 9001) of account 100, delivered, with one matched entry of ₹1,180.40. */
+/**
+ * Order SO-1001 (id 9001) of account 100, delivered, with one matched entry of ₹1,180.40, and a
+ * known product cost of ₹250.00 (1 × ₹250 from 1 Oct 2026, product 700).
+ */
 export function orderSummary(overrides: Partial<OrderSummary> = {}): OrderSummary {
   return {
     id: '9001',
@@ -247,6 +256,13 @@ export function orderSummary(overrides: Partial<OrderSummary> = {}): OrderSummar
     currentStatus: 'Delivered',
     currentStatusObservedAt: '2026-10-29T18:29:59.999Z',
     settlement: { entryCount: 1, amount: '1180.40' },
+    productId: '700',
+    productCost: {
+      state: 'known',
+      unitCost: '250.0000',
+      effectiveFrom: '2026-10-01',
+      total: '250.0000',
+    },
     ...overrides,
   };
 }
@@ -389,4 +405,102 @@ export function reconciliationOverview(
     ],
     ...overrides,
   };
+}
+
+/** Product KURTA-M (id 700) of account 100: 12 orders, 2 without a cost, ₹250 since 1 Oct 2026. */
+export function productSummary(overrides: Partial<ProductSummary> = {}): ProductSummary {
+  return {
+    id: '700',
+    sellerAccountId: '100',
+    sku: 'KURTA-M',
+    name: 'Cotton kurta',
+    catalogId: 'CAT-5',
+    status: 'active',
+    orderCount: 12,
+    ordersWithoutCost: 2,
+    currentCost: { unitCost: '250.0000', effectiveFrom: '2026-10-01' },
+    costCount: 2,
+    createdAt: '2026-10-30T08:00:00.000Z',
+    updatedAt: '2026-10-30T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function costEntry(overrides: Partial<CostEntry> = {}): CostEntry {
+  return {
+    id: '801',
+    unitCost: '250.0000',
+    effectiveFrom: '2026-10-01',
+    note: 'October price',
+    createdBy: { id: '1', displayName: 'Asha Rao', email: 'asha@example.com' },
+    createdAt: '2026-10-30T09:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/**
+ * {@link productSummary} in workspace 10 with two costs, newest first: ₹250 from 1 Oct, ₹230.5
+ * from 1 Sep.
+ */
+export function productDetail(overrides: Partial<ProductDetail> = {}): ProductDetail {
+  return {
+    ...productSummary(overrides),
+    workspaceId: '10',
+    costHistory: [
+      costEntry(),
+      costEntry({ id: '800', unitCost: '230.5000', effectiveFrom: '2026-09-01', note: null }),
+    ],
+    ...overrides,
+  };
+}
+
+/** The API's categories (a subset, with `other` needing a description). */
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  {
+    key: 'packaging',
+    label: 'Packaging & labels',
+    help: 'Boxes, poly bags, tape and labels you buy.',
+    descriptionRequired: false,
+  },
+  {
+    key: 'staff',
+    label: 'Salaries & staff',
+    help: 'Wages of people who pack and ship.',
+    descriptionRequired: false,
+  },
+  {
+    key: 'other',
+    label: 'Other (description required)',
+    help: 'Anything else; describe it.',
+    descriptionRequired: true,
+  },
+];
+
+/** A ₹1,200.50 packaging expense of account 100 in workspace 10, on 5 Oct 2026. */
+export function expense(overrides: Partial<Expense> = {}): Expense {
+  return {
+    id: '900',
+    workspaceId: '10',
+    sellerAccountId: '100',
+    scope: 'account',
+    expenseDate: '2026-10-05',
+    category: 'packaging',
+    categoryLabel: 'Packaging & labels',
+    description: 'Poly bags',
+    amount: '1200.50',
+    createdBy: { id: '1', displayName: 'Asha Rao', email: 'asha@example.com' },
+    createdAt: '2026-10-05T09:00:00.000Z',
+    updatedAt: '2026-10-05T09:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function expenseList(
+  items: Expense[],
+  totals: ExpenseListResponse['totals'] = { amount: '1200.50', count: items.length },
+  page = 1,
+  total = items.length,
+  pageSize = 25,
+): ExpenseListResponse {
+  return { items, page, pageSize, total, totals };
 }

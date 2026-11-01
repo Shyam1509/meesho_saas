@@ -9,6 +9,9 @@ protection, rate limiting, workspaces, members and seller accounts with owner/me
 transactions and order status history (see [Imports](#imports-milestone-4)). Milestone 5 (orders and
 settlements): order list / detail / status history, settlement entries with as-reported totals, and
 settlement ↔ order reconciliation (see [Orders, settlements and reconciliation](#orders-settlements-and-reconciliation-milestone-5)).
+Milestone 6 (products, costs and expenses): one product per SKU mapped to orders, effective-dated unit costs
+with each order's product cost, and manual expenses without double counting (see
+[Products, costs and expenses](#products-costs-and-expenses-milestone-6)).
 The repository-level README covers the whole project.
 
 ## Setup
@@ -75,6 +78,19 @@ Everything requires a session unless marked public. ids in JSON are strings; tim
 | `POST /accounts/:accountId/reconciliation/runs` | member | 201 RunSummary (trigger `manual`); 409 account disabled |
 | `POST /accounts/:accountId/reconciliation/manual-match` `{ settlementEntryId, orderId }` | owner | 200 SettlementEntry; 404 entry / order not in this account; 409 superseded / account-level entry / account disabled |
 | `POST /accounts/:accountId/reconciliation/manual-unmatch` `{ settlementEntryId }` | owner | 200 SettlementEntry; 404; 409 not matched / superseded / account disabled |
+| `GET /accounts/:accountId/products?page&pageSize&sort&q&status&cost` | member | `{ items: ProductSummary[], page, pageSize, total }` (default `sku`, `status=active`; `cost=missing\|known\|incomplete`) |
+| `POST /accounts/:accountId/products` `{ sku, name?, catalogId? }` | member | 201 ProductDetail (links the account's orders with that SKU); 409 SKU exists (details `sku`) / account disabled |
+| `POST /accounts/:accountId/products/sync` | member | 200 `{ createdProducts, linkedOrders }` (idempotent); 409 account disabled |
+| `GET /products/:productId` | member | ProductDetail (summary + `costHistory`, newest `effectiveFrom` first) |
+| `PATCH /products/:productId` `{ name?, status? }` | member | 200 ProductDetail (`name: null` clears; `archived` / `active`); 409 account disabled |
+| `POST /products/:productId/cost-history` `{ effectiveFrom, unitCost, note? }` | owner | 201 CostEntry; 409 a cost already starts that day (details `effectiveFrom`) / account disabled |
+| `DELETE /products/:productId/cost-history/:costId` | owner | 204; 404 when the entry is not one of this product |
+| `GET /expenses/categories` | signed in | `{ items: [{ key, label, help, descriptionRequired }] }` |
+| `GET /accounts/:accountId/expenses?page&pageSize&sort&from&to&category` | member | `{ items: Expense[], page, pageSize, total, totals: { amount, count } }` (default `-expenseDate`) |
+| `GET /workspaces/:workspaceId/expenses?…&scope=workspace\|all` | member | same shape; `workspace` (default) = workspace-wide only, `all` = also every account's |
+| `POST /accounts/:accountId/expenses`, `POST /workspaces/:workspaceId/expenses` `{ expenseDate, category, description?, amount }` | owner | 201 Expense (scope `account` / `workspace` from the route); 409 account disabled |
+| `PATCH /expenses/:expenseId` `{ expenseDate?, category?, description?, amount? }` | owner | 200 Expense (scope and account never change); 409 account disabled |
+| `DELETE /expenses/:expenseId` | owner | 204 |
 
 Every ImportSummary carries `allowedActions` (`confirm` / `retry` / `cancel`), computed by the server: the UI
 shows only those buttons.
@@ -122,8 +138,8 @@ shows only those buttons.
   client id with one query joined to the caller's membership: not a member (or missing) → 404, member
   without the role → 403. Later queries use only the ids it returns.
 - **Audit**: workspace created/renamed and seller account created/updated/disabled/enabled are written to
-  `audit_logs` (changed fields only) in the same transaction as the change; so are imports (M4) and manual
-  settlement matches / unmatches (M5).
+  `audit_logs` (changed fields only) in the same transaction as the change; so are imports (M4), manual
+  settlement matches / unmatches (M5), and product create / edit / sync, cost rows and expenses (M6).
 - **Logs**: request URLs are logged without their query string; Cookie, Set-Cookie, Authorization and
   X-XSRF-TOKEN are redacted; login success logs the user id, failures never log the email.
 - **Caching**: every `/api/v1` response (errors included) carries `Cache-Control: no-store`.
@@ -244,12 +260,13 @@ in India (23:59:59.999 IST). Workbooks use the upload time. Each confirmed order
 `unchanged` otherwise, the observation time still advances); an older report only adds history (row action
 `status_event`, its own count: `planned.historyOnly` / `historyOnlyCount`). A blank cell in a newer report never
 erases a value an earlier report gave. Statuses are stored raw (trimmed, case kept) and M5 keeps them raw (no
-normalisation yet). Prices are stored as reported (per unit vs line total still unknown); `product_id` and
-`is_estimate` stay NULL / false (M6 / supersession deferred). Since M5 every completed confirm also runs the
-settlement ↔ order matcher in the same transaction (see below).
+normalisation yet). Prices are stored as reported (per unit vs line total still unknown); `is_estimate`
+stays false (supersession deferred). Since M5 every completed confirm also runs the settlement ↔ order
+matcher in the same transaction (see below); since M6 an orders confirm also creates the missing products
+and sets `product_id` by SKU (see Milestone 6).
 
-**Audit and logs.** `import.confirmed` (counts) and `import.cancelled` are written to `audit_logs` in the same
-transaction. Logs carry the job id, account id, counts and durations: never row values or file names.
+**Audit and logs.** `import.confirmed` (counts; for an orders CSV also `createdProducts` / `linkedOrders`,
+M6) and `import.cancelled` are written to `audit_logs` in the same transaction. Logs carry the job id, account id, counts and durations: never row values or file names.
 
 **Limitations.**
 - A crashed import stays `importing` until someone retries or cancels it after 15 minutes (no automatic
@@ -348,6 +365,105 @@ are separate statuses. Settlement search does not look at the matched order's SK
 the request and the confirm transaction: on the dev MySQL (READ COMMITTED, two 20k accounts) one job that newly
 matches 16,200 entries took ~4.2 s (the row writes themselves), and the after-run exception counts 0.1–0.3 s
 per confirm. Batch or queue it if real files are much larger (later decision).
+
+## Products, costs and expenses (Milestone 6)
+
+> **Never 0 for unknown.** A cost that is not known is `null` with state `unknown` (or `no_product`), never 0:
+> missing costs make profit incomplete, not falsely precise. A real cost of zero is `0.0000` with state `known`.
+
+**Access.** Reads: members. Product create / edit / sync: members. Cost rows and expenses: owner only. A
+non-member gets 404 on every route; a product, cost entry or expense id of another account or workspace is 404
+(`/products/:id` and `/expenses/:id` resolve through one query joined to the caller's membership:
+`requireProduct` / `requireExpense`). A disabled seller account is read-only: product, cost and account-expense
+writes → 409 (workspace-wide expenses are not affected).
+
+**Mapping rule (product = SKU).** One product per (account, SKU); SKUs compare exactly (case-sensitive, as
+imported). `orders.product_id` equals the product with the order's SKU in that account, or NULL when the order
+has no SKU or the SKU has no product (yet). Every write that creates a product or changes an order's SKU
+re-links every order of the account with that SKU, in the same transaction and account lock:
+- every orders import confirm: after the order upserts, it creates a product for each SKU of the job's orders
+  that has none (name and catalog id from that SKU's latest order in the job with a product name), re-links the
+  orders the job observed (an order whose SKU changed in a newer report moves to the right product), then
+  re-links EVERY order of the account carrying one of the job's SKUs (e.g. orders imported before M6, so they
+  get the new product and its costs; a SKU can never be erased: a blank cell never overwrites a value);
+- `POST .../products` (a SKU not seen yet): links the account's existing orders with exactly that SKU;
+- `POST .../products/sync` (members, idempotent): the same for every SKU of the account. Needed only for data
+  imported before M6 whose SKU appears in no later import: until then those orders are `no_product` (their SKU
+  has no product, so the rule still holds).
+
+Auto-creation never updates an existing product, so a name a user edited is never overwritten. The SKU of a
+product never changes and products are never deleted. **Archived products** only leave the default list: their
+orders stay mapped, new orders with their SKU are still linked to them, and their costs still apply to those
+orders (archive is a display choice, not "stop costing"). Several SKUs → one product is not supported. Every product write (and the import confirm) runs in a
+READ COMMITTED transaction whose first statement locks the seller account row (`inAccountTransaction`, shared with
+M5 reconciliation), so writes of one account are serialised; lock timeout / deadlock → 409, retry.
+
+**Cost rule.** Unit cost on date D = the cost row with the greatest `effectiveFrom <= D` (`db/SCHEMA.md`); no
+such row → unknown. Order product cost = unit cost on the ORDER date × quantity, computed by MySQL in DECIMAL and
+returned exactly with 4 decimals (`2 × 549.5000 = 1099.0000`, `3 × 333.3333 = 999.9999`; the UI shows 2).
+`OrderSummary` / `OrderDetail` / orders-without-settlement items carry `productId` and
+`productCost: { state, unitCost, effectiveFrom, total }`: `known`; `unknown` (mapped product, no cost on that
+date); `no_product` (no SKU, or a SKU whose product does not exist yet: run sync). A product's `currentCost` is
+the cost effective TODAY in India (a future-dated cost is ignored until its day); `ordersWithoutCost` counts its
+orders in state `unknown`. The rule lives in one file, `src/products/effective-cost.ts`, in two equivalent forms:
+a per-row join for orders (date = each order's date) and grouped per-account CTEs for product lists (current =
+`MAX(effective_from) <= today`; without cost = order date before the first `effective_from`).
+- Cost rows (owner): `effectiveFrom` YYYY-MM-DD, at most 366 days after today (planned price changes);
+  `unitCost` decimal string (a JSON number is accepted) 0 ≤ x < 100000000 with at most 4 decimals; `note` ≤ 255.
+  One cost per start date (409); no in-place edit: delete the wrong row and add it again. Audit
+  `product_cost.created` / `product_cost.deleted` with the row (`productId`, `sku`, `effectiveFrom`,
+  `unitCost`, `note`).
+- Product list: `sort` ∈ `sku` (default), `name`, `orderCount`, `currentUnitCost` (`-` = descending; products
+  without a name / current cost sort last both ways; ties on id); `status=active|archived|all` (default active);
+  `cost=missing` (no cost effective today, i.e. `currentCost` null) / `known` (`currentCost` set) / `incomplete`
+  (`ordersWithoutCost > 0`: at least one order dated before the product's first cost, or no cost at all);
+  `q` = SKU starting with (exact case) or name containing (any case). ProductSummary / ProductDetail carry
+  `workspaceId` (with `sellerAccountId`) so the caller's role can be read from `GET /auth/me` without another
+  request. Audit `product.created`, `product.updated` (changed fields), `products.synced` (only when something
+  changed).
+
+**Expenses.** Scope `account` (`/accounts/:id/expenses`) or `workspace` (`/workspaces/:id/expenses`), fixed by
+the route at creation and never changed (`scope`, `sellerAccountId`, `workspaceId` in a body → 400).
+`expenseDate` YYYY-MM-DD, not after today in India; `amount` decimal string (a JSON number is accepted)
+0 < x < 10000000000 with at most 2 decimals, stored and returned with 2; `description` ≤ 255, required when the
+category is `other` (also when a PATCH makes it `other` or clears it; invisible format characters such as a
+zero-width space are removed from descriptions and notes first, so they do not count as text). Lists: `sort` ∈
+`expenseDate` (default `-expenseDate`), `amount`, `category` (by the LABEL shown, e.g. "Salaries & staff" before
+"Software & tools", not by key), `createdAt`; `from` / `to` (expense date, inclusive); `category`
+repeatable; the workspace list shows workspace-wide expenses only, or every expense of the workspace with
+`scope=all`. `totals: { amount, count }` = `SUM(amount)` in DECIMAL over ALL rows matching the filters (not just
+the page; `amount` null when none), read in the same snapshot as the page. Hard delete. Audit
+`expense.created` / `expense.updated` (changed fields) / `expense.deleted` (the row).
+
+**Categories and double counting.** An app-level allowlist (`src/expenses/expense-categories.ts`;
+`GET /expenses/categories`): `packaging` Packaging & labels · `own_shipping` Own courier / transport (not Meesho
+shipping) · `warehousing` Own storage / warehouse · `staff` Salaries & staff · `rent_utilities` Rent & utilities
+· `software_tools` Software & tools · `external_marketing` Marketing outside Meesho (not Meesho Ads) ·
+`professional_fees` Accounting & legal · `bank_charges` Bank charges · `other` Other (description required). It
+deliberately has no category for what the settlement workbook already deducts (Meesho commission, shipping,
+ads, TCS/TDS, recoveries/penalties) or for product purchase cost (entered per unit on Products): "Meesho
+commission, shipping, ads, TCS/TDS and recoveries come from your settlement workbook, and product purchase cost
+is entered per unit on Products — don't enter them here, or they are counted twice." Contribution / profit
+formulas that combine these are Milestone 7.
+
+**Indexes and performance.** None added: cost lookups use `uq_product_cost_history_product_effective_from`,
+order counts per product `ix_orders_account_product`, SKU links `ix_orders_account_sku` /
+`uq_products_account_sku`, the import pass `ix_order_status_events_account_import_job`, expense lists
+`ix_expenses_account_expense_date` / `ix_expenses_workspace_expense_date`. Lists page by ids first (deferred
+join): the page's ids come from `orders` / `products` alone, and only those rows get their cost and statistics;
+the product statistics (grouped CTEs, driven from the account's products so other tenants' rows are never
+scanned) are computed only when the sort or filter reads them. EXPLAIN ANALYZE on the test MySQL with one account
+of 5,000 products / 5,905 cost rows / 20,000 orders plus a second account (2,000 / 20,000), median of 5 runs
+(page + total + summaries): products by `sku` 19 ms, by `-orderCount` 65 ms, by `currentUnitCost` 110 ms,
+`cost=missing` 86 ms, `cost=incomplete` 203 ms, product detail 1.4 ms; orders page 1 12 ms, page 400 13 ms. The
+first version (a correlated subquery per product, cost joined before LIMIT) took 1,034 / 408 ms for the two
+statistic sorts, 110–240 ms for each total and 425 ms for orders page 400. Writes (in a rolled-back
+transaction): an import pass over 2,000 orders whose links are already right 91 ms; a whole-account sync with
+nothing to do 209 ms, re-linking 9,000 orders 0.8 s.
+
+**Limitations.** One product per SKU (no merging of SKU variants). Re-linking bumps `orders.updated_at` of the
+orders it changes. Products can be archived, not deleted. Costs and expenses are INR only. The timings above are
+from a development machine with synthetic data (and varied by up to ~2× between runs).
 
 Errors always use `{ "error": { "code", "message", "requestId", "details"? } }`; codes and
 their HTTP status live in `src/common/errors/error-codes.ts` (an `ApiException` carries an explicit code,

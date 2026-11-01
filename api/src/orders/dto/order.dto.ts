@@ -20,6 +20,10 @@ import {
   toSearchText,
 } from '../../common/http/list-query';
 import { ImportRefDto } from '../../common/http/refs.dto';
+import {
+  PRODUCT_COST_STATES,
+  type ProductCostState,
+} from '../../products/effective-cost';
 import { SettlementEntryDto } from '../../settlements/dto/settlement.dto';
 
 export const ORDER_SORT_KEYS = [
@@ -121,6 +125,42 @@ export class OrderSettlementSummaryDto {
   amount!: string | null;
 }
 
+/** Product cost of an order line (M6): effective unit cost on the ORDER date × quantity. */
+export class OrderProductCostDto {
+  @ApiProperty({
+    enum: PRODUCT_COST_STATES,
+    description:
+      'known: a cost is effective on the order date; unknown: the product has no cost on that date (profit incomplete, never 0); no_product: the order is mapped to no product (no SKU, or data imported before M6 not yet synced)',
+  })
+  state!: ProductCostState;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '549.5000',
+    description: 'Unit cost (4 decimals) effective on the order date',
+  })
+  unitCost!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    format: 'date',
+    example: '2026-10-02',
+    description: 'effectiveFrom of that cost row',
+  })
+  effectiveFrom!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '1099.0000',
+    description:
+      'unitCost × quantity, exact (4 decimals, computed in DECIMAL by MySQL); null unless state is known',
+  })
+  total!: string | null;
+}
+
 export class OrderSummaryDto {
   @ApiProperty({ example: '41' })
   id!: string;
@@ -176,6 +216,18 @@ export class OrderSummaryDto {
 
   @ApiProperty({ type: OrderSettlementSummaryDto })
   settlement!: OrderSettlementSummaryDto;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '7',
+    description:
+      'Product with the same SKU in this account (M6 mapping rule); null when the order has no SKU or the SKU has no product yet',
+  })
+  productId!: string | null;
+
+  @ApiProperty({ type: OrderProductCostDto })
+  productCost!: OrderProductCostDto;
 }
 
 export class OrderListDto {

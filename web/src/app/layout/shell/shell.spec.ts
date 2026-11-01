@@ -47,11 +47,11 @@ describe('Shell', () => {
     ) as HTMLButtonElement;
   const detectChanges = () => harness.fixture.detectChanges();
 
-  // Starts on a page that calls no API (Orders, Settlements and Imports load seller accounts), so
-  // these tests see only the shell's own requests.
+  // Starts on a page that calls no API (Orders, Settlements, Products, Expenses and Imports load
+  // data), so these tests see only the shell's own requests.
   async function createHarness(me: MeResponse = ME_TWO_WORKSPACES): Promise<void> {
     auth.setSession(me);
-    harness = await RouterTestingHarness.create('/products');
+    harness = await RouterTestingHarness.create('/reports');
   }
 
   beforeEach(() => {
@@ -145,6 +145,17 @@ describe('Shell', () => {
       expect(current.map((a) => a.textContent?.trim())).toEqual(['Reports']);
     });
 
+    it('keeps "Products & costs" current on a product’s page (/products/:productId)', async () => {
+      await harness.navigateByUrl('/products/700');
+      httpTesting
+        .expectOne('/api/v1/products/700')
+        .flush(null, { status: 404, statusText: 'Not Found' });
+      await harness.fixture.whenStable();
+
+      const current = navLinks().filter((a) => a.getAttribute('aria-current') === 'page');
+      expect(current.map((a) => a.textContent?.trim())).toEqual(['Products & costs']);
+    });
+
     it('keeps "Orders" current on an order’s page (/accounts/:accountId/orders/:orderId)', async () => {
       await harness.navigateByUrl('/accounts/100/orders/9001');
       httpTesting
@@ -235,7 +246,7 @@ describe('Shell', () => {
         'Sign-out failed: Could not reach the server. Check your connection and try again.',
       );
       expect(auth.isAuthenticated()).toBe(true);
-      expect(TestBed.inject(Router).url).toBe('/products');
+      expect(TestBed.inject(Router).url).toBe('/reports');
     });
   });
 });

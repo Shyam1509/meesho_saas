@@ -38,7 +38,7 @@ export class ProductCostHistory extends Model<
 
   /**
    * DECIMAL(12,4) as a string (exact; lot-based costs such as 1000/3). Line cost = unitCost x quantity,
-   * rounded half-up to 2 decimals when calculated (M6).
+   * computed by MySQL in DECIMAL and returned exactly with 4 decimals (M6; the UI shows 2).
    */
   @Column({ type: DataType.DECIMAL(12, 4), allowNull: false })
   unitCost!: string;

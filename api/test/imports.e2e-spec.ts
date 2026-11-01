@@ -5,6 +5,7 @@ import {
   ImportRow,
   Order,
   OrderStatusEvent,
+  Product,
   SellerAccount,
   SettlementEntry,
   WorkspaceMember,
@@ -434,12 +435,17 @@ describe('imports (e2e)', () => {
         }),
       );
       const so2 = (await order(shop, 'SO-2')) as Order;
+      // M6: the confirm created one product per SKU (SKU-A, SKU-B) and mapped each order to its SKU's product.
+      const skuB = await Product.findOne({
+        where: { sellerAccountId: Number(shop), sku: 'SKU-B' },
+      });
+      expect(skuB).not.toBeNull();
       expect(so2).toEqual(
         expect.objectContaining({
           orderDate: '2026-10-02',
           quantity: 2,
           supplierListedPrice: '250.50',
-          productId: null,
+          productId: skuB?.id,
           currentStatus: 'SHIPPED',
           firstImportJobId: Number(job1.id),
           lastImportJobId: Number(job1.id),
@@ -466,6 +472,8 @@ describe('imports (e2e)', () => {
             statusEvents: 3,
             skippedRows: 0,
             retry: false,
+            createdProducts: 2,
+            linkedOrders: 3,
           },
           requestId: res.headers['x-request-id'],
         },

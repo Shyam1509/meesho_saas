@@ -94,8 +94,8 @@ export function newRunId(): string {
 
 /**
  * Deletes everything created by users whose email ends in `-<runId>@example.test`, children first
- * (imported data, import jobs, audit_logs and seller_accounts are RESTRICT; import rows, memberships and
- * sessions cascade).
+ * (imported data, import jobs, products and their costs, expenses, audit_logs and seller_accounts are
+ * RESTRICT; import rows, memberships and sessions cascade).
  */
 export async function deleteRunData(
   sequelize: Sequelize,
@@ -129,6 +129,13 @@ export async function deleteRunData(
   ]) {
     await run(`DELETE FROM ${table} WHERE workspace_id IN (${runWorkspaces})`);
   }
+  // M6: cost history → products (orders, which reference products, are gone), and expenses.
+  await run(
+    `DELETE FROM product_cost_history WHERE product_id IN
+       (SELECT id FROM products WHERE workspace_id IN (${runWorkspaces}))`,
+  );
+  await run(`DELETE FROM products WHERE workspace_id IN (${runWorkspaces})`);
+  await run(`DELETE FROM expenses WHERE workspace_id IN (${runWorkspaces})`);
   await run(
     `DELETE FROM seller_accounts WHERE workspace_id IN (${runWorkspaces})`,
   );

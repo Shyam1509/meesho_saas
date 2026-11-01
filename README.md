@@ -19,7 +19,7 @@ and profit are never mixed up.
 | 3 | Auth and workspace authorization (owner/member), cross-tenant denial tests | Done (sign-in, workspaces, seller accounts; see `api/README.md`) |
 | 4 | Import pipeline: CSV orders, XLSX settlements, preview, validation, idempotency, status history | Done (built on synthetic files; verify with real Meesho exports) |
 | 5 | Orders, settlements, reconciliation | Done (matching by sub order no.; supersession deferred) |
-| 6 | Products, effective-dated costs, expenses | Not started |
+| 6 | Products, effective-dated costs, expenses | Done (one product per SKU; costs per unit from a date) |
 | 7 | Dashboard, account comparison, CSV reports | Not started |
 | 8 | UX hardening | Not started |
 | 9 | Release readiness | Not started |
@@ -43,10 +43,17 @@ What works today:
   sub order no. automatically after every import; the reconciliation tab shows matched / unmatched / account-level
   counts and sums, unmatched entries (owners can match one to an order by hand), orders without a matched
   settlement, and a log of matching runs. Owners can also unmatch an entry; automatic matching then leaves it alone.
+- **Products & costs**: every SKU in the imported orders becomes a product automatically (older orders with that
+  SKU are linked too; "Sync from orders" covers anything imported earlier). Owners record each product's unit cost
+  with the date it applies from; an order's product cost = the unit cost in effect on its order date × quantity.
+  An order with no cost on that date shows "Unknown cost", never ₹0, and products with such orders can be filtered.
+- **Expenses**: owners add, edit and delete expenses for one seller account or for the whole workspace; members can
+  view them. Categories deliberately exclude what the settlement workbook already deducts (Meesho commission,
+  shipping, ads, TCS/TDS, recoveries) and product purchase cost, so nothing is counted twice.
 - `GET /api/v1/health` (API + database check), Swagger UI, and an Overview panel with live API/database status.
 
-Products, expenses and reports screens are still placeholders that name their milestone. Amounts shown are as
-reported by Meesho: there is no profit, cost or bank-payout figure yet (Milestones 6 and 7).
+The Reports screen is still a placeholder. There is no dashboard or profit figure yet (Milestone 7); amounts shown
+are as reported by Meesho or entered by you.
 
 ## Architecture
 
@@ -55,12 +62,13 @@ meesho_saas/
   api/       NestJS 11 REST API under /api/v1 (TypeScript)
     src/       config/ (env validation), common/ (errors, logging, http), database/ (+ models/), health/,
                auth/ (+ csrf/), authorization/, audit/, workspaces/, seller-accounts/, imports/, orders/,
-               settlements/, reconciliation/
+               settlements/, reconciliation/, products/, expenses/
     db/        sequelize-cli: config.js, migrations/, seeders/ (CommonJS: the CLI cannot run TS), SCHEMA.md
     test/      e2e tests (supertest) and db/ schema tests, both against the real test database
   web/       Angular 21 standalone app + Tailwind CSS 4
     src/app/   core/ (API client, auth state + guards, workspaces, seller accounts, health, title), layout/shell,
-               features/ (auth, overview, seller-accounts, settings, imports, orders, settlements), shared/
+               features/ (auth, overview, seller-accounts, settings, imports, orders, settlements, products,
+               expenses), shared/
   scripts/   dev-mysql.ps1, an optional local MySQL helper for Windows
 ```
 
@@ -221,8 +229,10 @@ transaction writes orders, status events and settlement entries → summary. Not
 
 ## Limitations (current)
 
-- Orders are not linked to products or costs yet (Milestone 6), and there are no dashboards, profit figures or CSV
-  exports (Milestone 7). Settlement totals are plain sums of the reported amounts.
+- There are no dashboards, profit figures or CSV exports yet (Milestone 7). Settlement and expense totals are plain
+  sums.
+- One product per SKU: several SKUs cannot share a product, and a product's cost is per unit only. Orders imported
+  before Milestone 6 whose SKU never appears in a later import stay without a product until "Sync from orders".
 - Settlement entries are matched to orders only by exact sub order no. Revised estimates are not detected yet
   (supersession is deferred until real files show how Meesho revises them); totals already skip any entry marked as
   superseded. Order statuses are kept exactly as reported (e.g. `DELIVERED` and `Delivered` are different values).

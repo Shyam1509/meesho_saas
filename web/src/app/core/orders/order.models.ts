@@ -13,6 +13,27 @@ export interface OrderSettlementSummary {
 }
 
 /**
+ * `known`: a unit cost is effective on the order date. `unknown`: the order has a product but no
+ * cost on that date. `no_product`: the order has no product, either because it has no SKU or
+ * because no product exists for its SKU yet (imported before products existed, until "Sync from
+ * orders").
+ */
+export type ProductCostState = 'known' | 'unknown' | 'no_product';
+
+/**
+ * The order's product cost: the unit cost effective on the ORDER date × quantity, as an exact
+ * decimal string (`total`, 4 decimals). Every field but `state` is `null` unless it is `known`;
+ * a missing cost is never 0.
+ */
+export interface OrderProductCost {
+  state: ProductCostState;
+  unitCost: string | null;
+  /** `YYYY-MM-DD`: the effective date of the cost row used. */
+  effectiveFrom: string | null;
+  total: string | null;
+}
+
+/**
  * One row of `GET /accounts/:accountId/orders`. Amounts are decimal strings (`null` = not in the
  * report), dates `YYYY-MM-DD`, timestamps ISO-8601. `currentStatus` is Meesho's raw status text.
  */
@@ -31,6 +52,9 @@ export interface OrderSummary {
   currentStatus: string | null;
   currentStatusObservedAt: string | null;
   settlement: OrderSettlementSummary;
+  /** The product with the order's SKU in this account; `null` without a SKU / product. */
+  productId: string | null;
+  productCost: OrderProductCost;
 }
 
 /** One saved status of an order, from the import that reported it. */

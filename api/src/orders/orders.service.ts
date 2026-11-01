@@ -27,6 +27,7 @@ import {
   addStatusFilter,
   HAS_SETTLEMENT_SQL,
   ORDER_SUMMARY_COLUMNS,
+  ORDER_SUMMARY_JOINS,
   orderOrderBy,
   orderScope,
   pageOfOrders,
@@ -152,6 +153,7 @@ export class OrdersService {
        FROM orders o
        JOIN import_jobs fj ON fj.seller_account_id = o.seller_account_id AND fj.id = o.first_import_job_id
        JOIN import_jobs lj ON lj.seller_account_id = o.seller_account_id AND lj.id = o.last_import_job_id
+       ${ORDER_SUMMARY_JOINS}
        WHERE o.seller_account_id = :sellerAccountId AND o.workspace_id = :workspaceId
          AND o.id = CAST(:orderId AS UNSIGNED)`,
       {

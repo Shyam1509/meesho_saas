@@ -2,7 +2,9 @@
 <p class="mt-2 max-w-3xl text-sm text-slate-600">
   Orders from the Meesho orders reports you imported, with Meesho's latest status. “Settled (as
   reported)” is the sum of the settlement entries matched to an order, as reported by Meesho — not
-  profit and not a bank payout.
+  profit and not a bank payout. “Product cost” is your unit cost effective on the order date ×
+  quantity, from <a routerLink="/products" class="rounded-sm text-accent-700 underline hover:text-accent-800">Products &amp; costs</a>;
+  “Unknown cost” means no cost covers that date yet, never ₹0.
 </p>
 
 <app-seller-account-picker

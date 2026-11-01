@@ -4,8 +4,10 @@ import type { Sequelize } from 'sequelize-typescript';
 import { hasRole } from './roles';
 import {
   ACCOUNT_NOT_FOUND_MESSAGE,
+  EXPENSE_NOT_FOUND_MESSAGE,
   IMPORT_NOT_FOUND_MESSAGE,
   INSUFFICIENT_ROLE_MESSAGE,
+  PRODUCT_NOT_FOUND_MESSAGE,
   WORKSPACE_NOT_FOUND_MESSAGE,
   WorkspaceAccessService,
 } from './workspace-access.service';
@@ -146,6 +148,102 @@ describe('WorkspaceAccessService (query stubbed)', () => {
         },
       ]);
       await expect(service.requireImportJob(1, '42', 'owner')).rejects.toEqual(
+        new ForbiddenException(INSUFFICIENT_ROLE_MESSAGE),
+      );
+    });
+  });
+
+  describe('requireProduct / requireExpense (M6)', () => {
+    it('product: one query joining it to its account and the caller membership; 404 / 403', async () => {
+      query.mockResolvedValueOnce([
+        {
+          id: 5,
+          workspaceId: 7,
+          sellerAccountId: 9,
+          accountStatus: 'disabled',
+          role: 'member',
+        },
+      ]);
+      await expect(service.requireProduct(1, '5', 'member')).resolves.toEqual({
+        product: { id: 5, workspaceId: 7, sellerAccountId: 9 },
+        accountStatus: 'disabled',
+        role: 'member',
+      });
+      expect(query).toHaveBeenCalledTimes(1);
+      const [sql, options] = query.mock.calls[0] as [
+        string,
+        { replacements: unknown },
+      ];
+      expect(sql).toContain('FROM products p');
+      expect(sql).toContain(
+        'JOIN seller_accounts a ON a.id = p.seller_account_id AND a.workspace_id = p.workspace_id',
+      );
+      expect(sql).toContain('JOIN workspace_members m');
+      expect(sql).toContain('CAST(:productId AS UNSIGNED)');
+      expect(sql).not.toContain('FOR UPDATE');
+      expect(options.replacements).toEqual({ userId: 1, productId: '5' });
+
+      query.mockResolvedValueOnce([]);
+      await expect(service.requireProduct(1, '5', 'member')).rejects.toEqual(
+        new NotFoundException(PRODUCT_NOT_FOUND_MESSAGE),
+      );
+      query.mockResolvedValueOnce([
+        {
+          id: 5,
+          workspaceId: 7,
+          sellerAccountId: 9,
+          accountStatus: 'active',
+          role: 'member',
+        },
+      ]);
+      await expect(service.requireProduct(1, '5', 'owner')).rejects.toEqual(
+        new ForbiddenException(INSUFFICIENT_ROLE_MESSAGE),
+      );
+    });
+
+    it('expense: one query through its workspace membership (account optional); 404 / 403', async () => {
+      query.mockResolvedValueOnce([
+        {
+          id: 31,
+          workspaceId: 7,
+          sellerAccountId: null,
+          scope: 'workspace',
+          accountStatus: null,
+          role: 'owner',
+        },
+      ]);
+      await expect(service.requireExpense(1, '31', 'owner')).resolves.toEqual({
+        expense: {
+          id: 31,
+          workspaceId: 7,
+          sellerAccountId: null,
+          scope: 'workspace',
+        },
+        accountStatus: null,
+        role: 'owner',
+      });
+      const [sql] = query.mock.calls[0] as [string];
+      expect(sql).toContain('FROM expenses e');
+      expect(sql).toContain(
+        'JOIN workspace_members m ON m.workspace_id = e.workspace_id AND m.user_id = :userId',
+      );
+      expect(sql).toContain('LEFT JOIN seller_accounts a');
+
+      query.mockResolvedValueOnce([]);
+      await expect(service.requireExpense(1, '31', 'member')).rejects.toEqual(
+        new NotFoundException(EXPENSE_NOT_FOUND_MESSAGE),
+      );
+      query.mockResolvedValueOnce([
+        {
+          id: 31,
+          workspaceId: 7,
+          sellerAccountId: 9,
+          scope: 'account',
+          accountStatus: 'active',
+          role: 'member',
+        },
+      ]);
+      await expect(service.requireExpense(1, '31', 'owner')).rejects.toEqual(
         new ForbiddenException(INSUFFICIENT_ROLE_MESSAGE),
       );
     });

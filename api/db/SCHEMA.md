@@ -1,10 +1,11 @@
-# Database schema (Milestones 2–5)
+# Database schema (Milestones 2–6)
 
 MySQL 8.0 (InnoDB, `utf8mb4` / `utf8mb4_0900_ai_ci`). Created only by the migrations in
 `db/migrations` (one table per migration: `20261030000001` … `20261030000014` in Milestone 2,
 `20261030000015-create-user-sessions` in Milestone 3; then column changes:
 `20261030000016-add-import-jobs-data-as-of-and-preview` and `20261030000017-add-import-jobs-history-only-count`
 in Milestone 4, `20261031000018-add-settlement-entries-auto-match-blocked` in Milestone 5); the app never syncs.
+Milestone 6 (products, costs, expenses) added no migration: it uses the M2 tables and keys as they are.
 `test/db/*.db-spec.ts` asserts everything below against a freshly migrated `meesho_test`.
 
 ## Conventions
@@ -15,8 +16,9 @@ in Milestone 4, `20261031000018-add-settlement-entries-auto-match-blocked` in Mi
   `created_at` only; so does `user_sessions`, whose `last_used_at` / `revoked_at` record its changes.
 - Money: `DECIMAL(12,2)`, read back as strings. **NULL = missing / not reported, 0 = zero.** No money
   column has a default. One exception in precision: `product_cost_history.unit_cost` is `DECIMAL(12,4)`
-  (lot-based unit costs such as ₹1000/3); line cost = `unit_cost × quantity`, rounded half-up to 2 dp at
-  calculation time (M6).
+  (lot-based unit costs such as ₹1000/3); line cost = `unit_cost × quantity`, computed by MySQL in DECIMAL
+  and returned exactly with 4 dp (M6: no rounding in the API, e.g. 3 × 333.3333 = 999.9999; the UI shows
+  2 dp). The M2 migration comment that says "rounded half-up to 2 decimals" predates this decision.
 - Currency: `product_cost_history.currency` and `expenses.currency` are `CHAR(3)` with `CHECK = 'INR'`.
   Orders and settlements carry no currency column (amounts are INR as reported).
 - Enumerations: `VARCHAR` + named `CHECK` (enforced since MySQL 8.0.16), not native `ENUM`. The model
@@ -181,6 +183,31 @@ self-references and cycles.
 Effective unit cost on date D = the `product_cost_history` row with the greatest `effective_from <= D`.
 There is no `effective_to`, so ranges cannot overlap; `UNIQUE (product_id, effective_from)` allows one
 cost per start date. No such row ⇒ cost **unknown** (profit incomplete), never zero.
+
+M6 implements it in one file, `src/products/effective-cost.ts`, in two equivalent forms: a LEFT JOIN on the
+row whose `effective_from` is `MAX(effective_from) <= D` (served by that unique key) for orders, where D = the
+ORDER date; and grouped per-account CTEs for product lists, where D = today in India for `currentCost` and an
+order has no cost exactly when its date is before the product's first `effective_from`.
+
+## Product ↔ order mapping (Milestone 6)
+
+Invariant: for every order, `orders.product_id` is the product of the same account with the same `sku` (exact:
+both columns `utf8mb4_bin`), or NULL when the order has no SKU or no product has that SKU. It holds because
+every write that can break it repairs it for every order of the account with the affected SKU, in the same
+transaction and under the account row lock:
+
+- an orders import confirm creates the missing products for its SKUs, re-links the orders it observed (an order
+  whose SKU changed in a newer report moves to the right product), then re-links every other order of the
+  account carrying one of those SKUs (orders imported earlier, e.g. before M6);
+- a product created by hand links every order with its SKU; `POST .../products/sync` creates the missing products
+  for every SKU of the account and re-links every order (idempotent);
+- products are never deleted and their SKU never changes; an order's SKU changes only through an import (a
+  blank cell never erases it).
+
+Orders imported before M6 whose SKU appears in no later import have `product_id` NULL because no product has
+their SKU yet (the invariant holds; their cost state is `no_product`) until `POST .../products/sync` creates the
+products. Manual edits of `products` / `orders.product_id` outside the app can break it; sync repairs that.
+One product per SKU: several SKUs cannot share a product.
 
 ## Deferred
 

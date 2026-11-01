@@ -16,6 +16,13 @@ const inr = new Intl.NumberFormat(LOCALE, {
   maximumFractionDigits: 2,
 });
 
+const inrUpTo4 = new Intl.NumberFormat(LOCALE, {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
+
 const count = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
 
 const oneDecimal = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
@@ -57,6 +64,18 @@ export function formatInr(value: string | number | null | undefined): string {
   }
   const trimmed = value.trim();
   return DECIMAL_PATTERN.test(trimmed) ? inr.format(Number(trimmed)) : value;
+}
+
+/**
+ * A unit cost in rupees, keeping up to 4 decimals (the precision costs are entered with):
+ * `"12.3456"` → "₹12.3456", `"250"` → "₹250.00", `"0"` → "₹0.00". Missing → "—".
+ */
+export function formatUnitCost(value: string | null | undefined): string {
+  if (isMissing(value)) {
+    return MISSING;
+  }
+  const trimmed = value.trim();
+  return DECIMAL_PATTERN.test(trimmed) ? inrUpTo4.format(Number(trimmed)) : value;
 }
 
 /** Whole numbers with Indian grouping: 1234567 → "12,34,567"; 0 → "0"; missing → "—". */

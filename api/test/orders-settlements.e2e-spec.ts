@@ -2,6 +2,7 @@ import { QueryTypes } from 'sequelize';
 import type { Response } from 'supertest';
 import { WorkspaceAccessService } from '../src/authorization/workspace-access.service';
 import {
+  Product,
   ReconciliationRun,
   SettlementEntry,
   WorkspaceMember,
@@ -50,6 +51,13 @@ interface OrderSummary {
   currentStatus: string;
   currentStatusObservedAt: string;
   settlement: { entryCount: number; amount: string | null };
+  productId: string | null;
+  productCost: {
+    state: string;
+    unitCost: string | null;
+    effectiveFrom: string | null;
+    total: string | null;
+  };
 }
 
 interface StatusEvent {
@@ -731,6 +739,11 @@ describe('orders, settlements and reconciliation (e2e)', () => {
         ['SO-102', { entryCount: 3, amount: '400.80' }],
         ['SO-101', { entryCount: 1, amount: '420.15' }],
       ]);
+      // M6: the import created the SKU's product and mapped the order to it; no cost entered → unknown.
+      const product = await Product.findOne({
+        where: { sellerAccountId: Number(a1), sku: 'KUR-BLU-L' },
+      });
+      expect(product).not.toBeNull();
       // SO-102: newer file moved status forward, a blank optional cell erased nothing.
       expect(list.items[3]).toEqual({
         id: orderIds['SO-102'],
@@ -747,6 +760,13 @@ describe('orders, settlements and reconciliation (e2e)', () => {
         currentStatus: 'DELIVERED',
         currentStatusObservedAt: endOfDayIst('2026-10-15'),
         settlement: { entryCount: 3, amount: '400.80' },
+        productId: String(product?.id),
+        productCost: {
+          state: 'unknown',
+          unitCost: null,
+          effectiveFrom: null,
+          total: null,
+        },
       });
     });
 

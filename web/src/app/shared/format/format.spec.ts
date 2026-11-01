@@ -7,10 +7,11 @@ import {
   formatDateTime,
   formatFileSize,
   formatInr,
+  formatUnitCost,
   localDateString,
   plural,
 } from './format';
-import { CountPipe, DisplayDateTimePipe, InrPipe } from './format.pipes';
+import { CountPipe, DisplayDateTimePipe, InrPipe, UnitCostPipe } from './format.pipes';
 
 describe('format helpers', () => {
   describe('formatInr', () => {
@@ -35,6 +36,23 @@ describe('format helpers', () => {
     it('shows a value that is not a number as it is', () => {
       expect(formatInr('n/a')).toBe('n/a');
       expect(formatInr(Number.NaN)).toBe(MISSING);
+    });
+  });
+
+  describe('formatUnitCost', () => {
+    it.each([
+      ['12.3456', '₹12.3456'],
+      ['12.3', '₹12.30'],
+      ['250', '₹250.00'],
+      ['0', '₹0.00'],
+      ['125000.5', '₹1,25,000.50'],
+    ])('formats %j as %s (up to 4 decimals)', (value, expected) => {
+      expect(formatUnitCost(value)).toBe(expected);
+      expect(new UnitCostPipe().transform(value)).toBe(expected);
+    });
+
+    it.each([null, undefined, ''])('shows "—" for a missing value (%j), never ₹0.00', (value) => {
+      expect(formatUnitCost(value)).toBe(MISSING);
     });
   });
 

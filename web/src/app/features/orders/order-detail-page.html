@@ -104,6 +104,26 @@
             <app-amount [value]="order.supplierDiscountedPrice" />
           </dd>
         </div>
+        <div data-testid="order-product-cost">
+          <dt class="text-slate-600">Product cost</dt>
+          <dd class="tabular-nums">
+            <app-order-product-cost
+              [cost]="order.productCost"
+              [quantity]="order.quantity"
+              [productId]="order.productId"
+              [sku]="order.sku"
+              [detailed]="true"
+            />
+            @if (order.productId) {
+              <a
+                [routerLink]="['/products', order.productId]"
+                class="mt-1 inline-block rounded-sm text-xs font-medium text-accent-700 underline hover:text-accent-800"
+              >
+                View product and unit costs
+              </a>
+            }
+          </dd>
+        </div>
         <div>
           <dt class="text-slate-600">First imported from</dt>
           <dd>

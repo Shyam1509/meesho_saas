@@ -15,6 +15,7 @@ import {
   DisplayDateTimePipe,
 } from '../../shared/format/format.pipes';
 import { SettlementEntriesTable } from '../settlements/settlement-entries-table/settlement-entries-table';
+import { OrderProductCostView } from './order-product-cost/order-product-cost';
 
 /** The API's id format (decimal BIGINT as a string). */
 const ID_PATTERN = /^[1-9][0-9]{0,18}$/;
@@ -39,7 +40,8 @@ export function sortStatusHistory(events: readonly StatusEvent[]): StatusEvent[]
 /**
  * `/accounts/:accountId/orders/:orderId`: one order's reported fields, its status history (each
  * status links to the import that reported it) and the settlement entries matched to it, with the
- * settled amount as reported. A malformed id, a 400 or a 404 (also for an order of another
+ * settled amount as reported, and its product cost (unit cost on the order date × quantity, or
+ * why it is unknown). A malformed id, a 400 or a 404 (also for an order of another
  * account) shows "not found".
  */
 @Component({
@@ -51,6 +53,7 @@ export function sortStatusHistory(events: readonly StatusEvent[]): StatusEvent[]
     DisplayDatePipe,
     DisplayDateTimePipe,
     SettlementEntriesTable,
+    OrderProductCostView,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './order-detail-page.html',
